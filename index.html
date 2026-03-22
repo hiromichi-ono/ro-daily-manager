@@ -5,604 +5,279 @@
 <title>RO Daily Manager</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-
 :root{
 --bg:#0f172a;
 --panel:#1e293b;
---text:#ffffff;
---tableHeader:#1f2937;
+--text:#fff;
 --accent:#3b82f6;
---done:#22c55e33;
---notyet:#ef444433;
+--done:#22c55e55;
+--notyet:#ef444455;
 }
-
 .light{
 --bg:#f1f5f9;
---panel:#ffffff;
+--panel:#fff;
 --text:#111;
---tableHeader:#e2e8f0;
 }
 
 body{
-font-family:Inter,sans-serif;
 margin:0;
+font-family:sans-serif;
 background:var(--bg);
 color:var(--text);
-padding:20px;
 }
 
-.container{
-max-width:1200px;
-margin:auto;
-}
-
-.panel{
+/* ヘッダ */
+header{
+position:sticky;
+top:0;
 background:var(--panel);
-padding:16px;
-border-radius:10px;
-margin-bottom:20px;
-}
-
-button{
-background:var(--accent);
-border:none;
-color:white;
-padding:8px 12px;
-border-radius:6px;
-cursor:pointer;
-margin:4px;
-}
-
-.topbar{
+padding:10px;
 display:flex;
 justify-content:space-between;
 align-items:center;
-flex-wrap:wrap;
-margin-bottom:15px;
+z-index:10;
 }
 
-.timer{
-font-weight:600;
-}
-
-.clock{
-font-size:16px;
-}
-
-.tableWrap{
-overflow-x:auto;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
-}
-
-th{
-background:var(--tableHeader);
-padding:10px;
-}
-
-td{
-padding:8px;
-text-align:center;
+button{
+margin:2px;
+padding:6px 10px;
 cursor:pointer;
 }
 
+.container{
+padding:10px;
+}
+
+/* テーブル */
+.tableWrap{overflow:auto;}
+table{border-collapse:collapse;width:100%;}
+th,td{border:1px solid #444;padding:6px;text-align:center;}
 .done{background:var(--done);}
 .notyet{background:var(--notyet);}
 
-.charCell{
-text-align:left;
-font-weight:600;
-}
-
-.warning{color:#f59e0b;}
-.danger{color:#ef4444;}
-
-dialog{
-border:none;
-border-radius:10px;
-padding:20px;
-}
-
+/* dialog */
+dialog{padding:20px;border-radius:10px;}
 </style>
 </head>
 
 <body>
 
-<div class="container">
-
-<div class="topbar">
+<header>
 
 <div>
-<button onclick="toggleTheme()">🌙/☀</button>
+<button onclick="toggleTheme()">🌙</button>
+<button onclick="exportURL()">URL出力</button>
 </div>
 
-<div class="timer">
-<span id="timerIcon">⏸</span>
-<span id="timerDisplay">00:00:00.000</span>
-<button onclick="startTimer()">Start</button>
-<button onclick="stopTimer()">Stop</button>
-<button onclick="resetTimer()">Reset</button>
+<div>
+<span id="timer">00:00:00.000</span>
+<button onclick="startTimer()">START</button>
+<button onclick="stopTimer()">STOP</button>
+<button onclick="resetTimer()">RESET</button>
 </div>
 
-<div class="clock" id="clock"></div>
+<div id="clock"></div>
 
-</div>
+</header>
 
-<div class="panel">
+<div class="container">
 
-<h2>RO デイリー管理</h2>
+<h3>RO デイリー管理</h3>
 
-<button onclick="openCharDialog()">キャラ追加</button>
-<button onclick="openQuestDialog()">クエスト追加</button>
+<button onclick="openChar()">キャラ編集</button>
+<button onclick="openQuest()">クエスト編集</button>
 
 <div class="tableWrap">
-<table>
-
-<thead>
-<tr id="headerRow">
-<th>キャラ</th>
-</tr>
-</thead>
-
-<tbody id="body"></tbody>
-
-</table>
+<table id="table"></table>
 </div>
-
-</div>
-
-<div class="panel">
 
 <h3>Ping Monitor</h3>
 
-<button onclick="togglePing()" id="pingToggle">Ping ON</button>
-
-<div id="pingValue">-- ms</div>
+<button onclick="togglePing()">ON/OFF</button>
 
 <div>
-平均: <span id="pingAvg">-</span> ms　
-最大: <span id="pingMax">-</span> ms
+現在:<span id="pingNow">-</span>
+平均:<span id="pingAvg">-</span>
+最大:<span id="pingMax">-</span>
 </div>
 
-<canvas id="pingChart" height="120"></canvas>
+<canvas id="chart"></canvas>
+
+<h3>URL共有</h3>
+<textarea id="urlBox" style="width:100%;height:80px"></textarea>
 
 </div>
 
-<!-- キャラ追加 -->
-
+<!-- dialogs -->
 <dialog id="charDialog">
-
-<h3>キャラ追加</h3>
-
 <input id="charName" placeholder="キャラ名"><br>
-<input id="charLevel" placeholder="Lv"><br>
-
-<button onclick="addChar()">追加</button>
-<button onclick="closeDialog('charDialog')">閉じる</button>
-
+<input id="charLv" placeholder="Lv"><br>
+<button onclick="saveChar()">SAVE</button>
+<button onclick="closeDialog('charDialog')">CANCEL</button>
 </dialog>
 
-<!-- クエスト追加 -->
-
 <dialog id="questDialog">
-
-<h3>クエスト追加</h3>
-
 <input id="questName" placeholder="クエスト名"><br>
-
 <select id="questType">
-<option value="daily">daily</option>
-<option value="three">3day</option>
-<option value="weekly">weekly</option>
-</select><br>
-
-<button onclick="addQuest()">追加</button>
-<button onclick="closeDialog('questDialog')">閉じる</button>
-
+<option value="daily">Daily</option>
+<option value="three">3Days</option>
+<option value="weekly">Weekly</option>
+</select>
+<br>
+<button onclick="saveQuest()">SAVE</button>
+<button onclick="closeDialog('questDialog')">CANCEL</button>
 </dialog>
 
 <script>
 
-/* 保存 */
+/* データ */
+let data=JSON.parse(localStorage.getItem("data")||'{"chars":[],"quests":[],"log":{}}')
 
-function load(){
-return JSON.parse(localStorage.getItem("roTracker")||'{"chars":{},"quests":[]}')
-}
-
-function save(){
-localStorage.setItem("roTracker",JSON.stringify(data))
-}
-
-let data=load()
+function save(){localStorage.setItem("data",JSON.stringify(data))}
 
 /* テーマ */
-
-function toggleTheme(){
-document.body.classList.toggle("light")
-}
+function toggleTheme(){document.body.classList.toggle("light")}
 
 /* 時計 */
-
-function updateClock(){
-document.getElementById("clock").textContent=new Date().toLocaleTimeString()
-}
-
-setInterval(updateClock,1000)
-updateClock()
+setInterval(()=>clock.textContent=new Date().toLocaleTimeString(),1000)
 
 /* タイマー */
-
-let timerStart=0
-let timerElapsed=0
-let timerRunning=false
-
-function startTimer(){
-
-if(timerRunning)return
-
-timerRunning=true
-timerStart=performance.now()-timerElapsed
-
-document.getElementById("timerIcon").textContent="▶"
-
-requestAnimationFrame(timerLoop)
-
+let t0=0,elapsed=0,run=false
+function startTimer(){if(run)return;run=true;t0=performance.now()-elapsed;loop()}
+function stopTimer(){run=false}
+function resetTimer(){run=false;elapsed=0;drawTimer()}
+function loop(){
+if(!run)return
+elapsed=performance.now()-t0
+drawTimer()
+requestAnimationFrame(loop)
 }
-
-function stopTimer(){
-
-timerRunning=false
-document.getElementById("timerIcon").textContent="⏸"
-
-}
-
-function resetTimer(){
-
-timerRunning=false
-timerElapsed=0
-updateTimer()
-
-}
-
-function timerLoop(){
-
-if(!timerRunning)return
-
-timerElapsed=performance.now()-timerStart
-
-updateTimer()
-
-requestAnimationFrame(timerLoop)
-
-}
-
-function updateTimer(){
-
-let ms=Math.floor(timerElapsed)
-
-let s=Math.floor(ms/1000)
-
-let milli=ms%1000
-
-let h=Math.floor(s/3600)
-let m=Math.floor((s%3600)/60)
-let sec=s%60
-
-document.getElementById("timerDisplay").textContent=
-
-String(h).padStart(2,"0")+":"+
-String(m).padStart(2,"0")+":"+
-String(sec).padStart(2,"0")+"."+
-String(milli).padStart(3,"0")
-
+function drawTimer(){
+let ms=elapsed|0
+let s=(ms/1000)|0
+timer.textContent=
+String((s/3600)|0).padStart(2,"0")+":"+
+String(((s%3600)/60)|0).padStart(2,"0")+":"+
+String(s%60).padStart(2,"0")+"."+
+String(ms%1000).padStart(3,"0")
 }
 
 /* ダイアログ */
-
-function openCharDialog(){
-document.getElementById("charDialog").showModal()
-}
-
-function openQuestDialog(){
-document.getElementById("questDialog").showModal()
-}
-
-function closeDialog(id){
-document.getElementById(id).close()
-}
+function openChar(){charDialog.showModal()}
+function openQuest(){questDialog.showModal()}
+function closeDialog(id){document.getElementById(id).close()}
 
 /* キャラ */
-
-function addChar(){
-
-let name=document.getElementById("charName").value.trim()
-let level=document.getElementById("charLevel").value.trim()
-
-if(!name)return
-
-data.chars[name]={level:level,quests:{}}
-
-save()
-render()
-
-closeDialog("charDialog")
-
-}
-
-function deleteChar(name){
-
-if(!confirm("削除？"))return
-
-delete data.chars[name]
-
-save()
-render()
-
+function saveChar(){
+let n=charName.value.trim()
+if(data.chars.find(c=>c.name===n)){alert("重複");return}
+data.chars.push({name:n,lv:charLv.value})
+save();render();closeDialog("charDialog")
 }
 
 /* クエスト */
-
-function addQuest(){
-
-let name=document.getElementById("questName").value.trim()
-let type=document.getElementById("questType").value
-
-if(!name)return
-
-data.quests.push({id:Date.now(),name,type})
-
-save()
-render()
-
-closeDialog("questDialog")
-
-}
-
-function deleteQuest(id){
-
-if(!confirm("削除？"))return
-
-data.quests=data.quests.filter(q=>q.id!==id)
-
-save()
-render()
-
-}
-
-/* 判定 */
-
-const RESET=5
-
-function baseDaily(){
-
-let n=new Date()
-
-if(n.getHours()<RESET)n.setDate(n.getDate()-1)
-
-n.setHours(RESET,0,0,0)
-
-return n
-
-}
-
-function isDaily(t){
-return t && new Date(t)>=baseDaily()
-}
-
-function resetCount(t){
-
-if(!t)return 999
-
-let c=0
-let now=new Date()
-let d=new Date(t)
-
-while(true){
-
-let next=new Date(d)
-next.setHours(RESET,0,0,0)
-
-if(next<=d)next.setDate(next.getDate()+1)
-
-if(next>now)break
-
-c++
-d=next
-
-}
-
-return c
-
-}
-
-function isThree(t){
-return resetCount(t)<3
-}
-
-function isWeekly(t){
-
-if(!t)return false
-
-let now=new Date()
-
-let d=new Date(now)
-
-let day=d.getDay()
-
-let diff=(day<2?day+5:day-2)
-
-d.setDate(d.getDate()-diff)
-
-d.setHours(RESET,0,0,0)
-
-return new Date(t)>=d
-
+function saveQuest(){
+data.quests.push({id:Date.now(),name:questName.value,type:questType.value})
+save();render();closeDialog("questDialog")
 }
 
 /* トグル */
-
-function toggle(char,id){
-
-let v=data.chars[char].quests[id]
-
-if(v){
-delete data.chars[char].quests[id]
-}else{
-data.chars[char].quests[id]=new Date().toISOString()
+function toggle(c,q){
+let k=c+"_"+q
+data.log[k]=data.log[k]?null:Date.now()
+save();render()
 }
 
-save()
-render()
-
+/* 判定 */
+function isDone(q,t){
+if(!t)return false
+let now=new Date()
+if(q.type==="daily"){
+let d=new Date();d.setHours(5,0,0,0)
+if(now<d)d.setDate(d.getDate()-1)
+return new Date(t)>=d
+}
+if(q.type==="three"){
+let diff=(now-t)/(1000*60*60*24)
+return diff<3
+}
+if(q.type==="weekly"){
+let d=new Date()
+let day=d.getDay()
+let diff=(day<2?day+5:day-2)
+d.setDate(d.getDate()-diff)
+d.setHours(12,0,0,0)
+return new Date(t)>=d
+}
 }
 
 /* 描画 */
-
 function render(){
-
-let header=document.getElementById("headerRow")
-header.innerHTML="<th>キャラ</th>"
+let html="<tr><th></th>"
+data.chars.forEach(c=>{
+html+=`<th draggable="true">${c.name}(Lv${c.lv})<button onclick="delChar('${c.name}')">x</button></th>`
+})
+html+="</tr>"
 
 data.quests.forEach(q=>{
-
-let th=document.createElement("th")
-
-th.innerHTML=
-q.name+
-` <button onclick="deleteQuest(${q.id})">🗑</button>`
-
-header.appendChild(th)
-
+html+=`<tr><th>${q.name}<button onclick="delQuest(${q.id})">x</button></th>`
+data.chars.forEach(c=>{
+let t=data.log[c.name+"_"+q.id]
+let done=isDone(q,t)
+html+=`<td class="${done?'done':'notyet'}" onclick="toggle('${c.name}',${q.id})">${done?'済':'未'}</td>`
+})
+html+="</tr>"
 })
 
-let body=document.getElementById("body")
-
-body.innerHTML=""
-
-for(let char in data.chars){
-
-let tr=document.createElement("tr")
-
-let td=document.createElement("td")
-
-td.className="charCell"
-
-td.innerHTML=
-char+" Lv"+data.chars[char].level+
-` <button onclick="deleteChar('${char}')">🗑</button>`
-
-tr.appendChild(td)
-
-data.quests.forEach(q=>{
-
-let cell=document.createElement("td")
-
-let time=data.chars[char].quests[q.id]
-
-let done=false
-
-if(q.type==="daily")done=isDaily(time)
-if(q.type==="three")done=isThree(time)
-if(q.type==="weekly")done=isWeekly(time)
-
-cell.className=done?"done":"notyet"
-
-cell.textContent=done?"済":"未"
-
-cell.onclick=()=>toggle(char,q.id)
-
-tr.appendChild(cell)
-
-})
-
-body.appendChild(tr)
-
+table.innerHTML=html
 }
 
-}
+/* 削除 */
+function delChar(n){data.chars=data.chars.filter(c=>c.name!==n);save();render()}
+function delQuest(id){data.quests=data.quests.filter(q=>q.id!==id);save();render()}
 
 /* Ping */
+let pingOn=false,history=[]
+const chart=new Chart(chart,{type:'line',data:{labels:[],datasets:[{data:[]}]}})
 
-let pingEnabled=true
-let pingHistory=[]
+function togglePing(){pingOn=!pingOn}
 
-const ctx=document.getElementById("pingChart")
-
-const chart=new Chart(ctx,{
-type:'line',
-data:{
-labels:[],
-datasets:[{
-label:'Ping (ms)',
-data:[],
-borderColor:'#3b82f6',
-tension:0.2
-}]
-},
-options:{animation:false}
-})
-
-function togglePing(){
-
-pingEnabled=!pingEnabled
-
-document.getElementById("pingToggle").textContent=
-pingEnabled?"Ping ON":"Ping OFF"
-
-}
-
-async function ping(){
-
-if(!pingEnabled)return
-
-const start=performance.now()
-
-try{
-
+setInterval(async()=>{
+if(!pingOn)return
+let s=performance.now()
 await fetch("https://www.google.com/generate_204",{mode:"no-cors"})
+let ms=(performance.now()-s)|0
+history.push(ms)
+if(history.length>120)history.shift()
 
-let latency=Math.round(performance.now()-start)
+pingNow.textContent=ms
+pingAvg.textContent=(history.reduce((a,b)=>a+b,0)/history.length)|0
+pingMax.textContent=Math.max(...history)
 
-pingHistory.push(latency)
-
-if(pingHistory.length>120)pingHistory.shift()
-
-let avg=Math.round(pingHistory.reduce((a,b)=>a+b,0)/pingHistory.length)
-let max=Math.max(...pingHistory)
-
-document.getElementById("pingAvg").textContent=avg
-document.getElementById("pingMax").textContent=max
-
-chart.data.labels=pingHistory.map((_,i)=>i)
-chart.data.datasets[0].data=pingHistory
-
+chart.data.labels=history.map((_,i)=>i)
+chart.data.datasets[0].data=history
 chart.update()
 
-let label=latency+" ms"
-let cls=""
+},1000)
 
-if(latency>200){label="🚨 "+latency+" ms";cls="danger"}
-else if(latency>100){label="⚠ "+latency+" ms";cls="warning"}
-
-let el=document.getElementById("pingValue")
-
-el.textContent=label
-el.className=cls
-
-}catch{
-document.getElementById("pingValue").textContent="timeout"
+/* URL */
+function exportURL(){
+let s=btoa(encodeURIComponent(JSON.stringify(data)))
+let url=location.origin+location.pathname+"?d="+s
+urlBox.value=url
+navigator.clipboard.writeText(url)
 }
 
+(function(){
+let p=new URLSearchParams(location.search).get("d")
+if(p){
+data=JSON.parse(decodeURIComponent(atob(p)))
+save()
 }
-
-setInterval(ping,1000)
+})()
 
 render()
 
