@@ -290,6 +290,18 @@ th{
   font-weight:700;
 }
 
+.cell-subtext{
+  margin-top:4px;
+  font-size:11px;
+  font-weight:600;
+  color:var(--muted);
+  line-height:1.2;
+}
+
+.cell-subtext-line{
+  display:block;
+}
+
 .headCell{
   display:flex;
   align-items:center;
@@ -589,6 +601,7 @@ dialog::backdrop{
 <header>
   <div class="header-group">
     <button id="themeBtn" class="btn btn-secondary btn-icon" type="button">🌙</button>
+    <button id="resetSettingsBtn" class="btn btn-secondary" type="button">設定リセット</button>
   </div>
 
   <div class="header-group">
@@ -724,6 +737,7 @@ dialog::backdrop{
 const $ = (id) => document.getElementById(id);
 
 const themeBtn = $("themeBtn");
+const resetSettingsBtn = $("resetSettingsBtn");
 const exportUrlBtn = $("exportUrlBtn");
 const startTimerBtn = $("startTimerBtn");
 const stopTimerBtn = $("stopTimerBtn");
@@ -772,6 +786,28 @@ function save(){
   localStorage.setItem("data", JSON.stringify(data));
 }
 
+function resetAppSettings(){
+  const ok = confirm("設定と進捗データを初期化します。\nこの操作は元に戻せません。\n実行しますか？");
+  if(!ok) return;
+
+  data = { chars: [], quests: [], log: {} };
+  localStorage.removeItem("data");
+  localStorage.removeItem("theme");
+
+  document.body.classList.remove("light");
+  updateThemeButton();
+
+  stopTimer();
+  resetTimer();
+  stopPing();
+  clearPing();
+
+  urlBox.value = "";
+  hideContextMenu();
+  hideTimeInfoPopup();
+  render();
+}
+
 function escapeHtml(value){
   return String(value).replace(/[&<>"']/g, (ch) => ({
     "&":"&amp;",
@@ -780,6 +816,38 @@ function escapeHtml(value){
     '"':"&quot;",
     "'":"&#39;"
   }[ch]));
+}
+
+function hasMeaningfulData(obj){
+  if(!obj) return false;
+  const chars = Array.isArray(obj.chars) ? obj.chars : [];
+  const quests = Array.isArray(obj.quests) ? obj.quests : [];
+  const log = obj.log && typeof obj.log === "object" ? obj.log : {};
+  return chars.length > 0 || quests.length > 0 || Object.keys(log).length > 0;
+}
+
+function normalizeImportedData(raw){
+  const safe = {
+    chars: Array.isArray(raw?.chars) ? raw.chars : [],
+    quests: Array.isArray(raw?.quests) ? raw.quests : [],
+    log: raw?.log && typeof raw.log === "object" ? raw.log : {}
+  };
+
+  // quest id が数値のものだけ保持
+  safe.quests = safe.quests
+    .filter((quest) => Number.isFinite(Number(quest?.id)))
+    .map((quest) => ({
+      id: Number(quest.id),
+      name: String(quest.name || ""),
+      type: ["daily", "three", "weekly"].includes(quest.type) ? quest.type : "daily"
+    }));
+
+  safe.chars = safe.chars.map((char) => ({
+    name: String(char?.name || ""),
+    lv: String(char?.lv || "")
+  })).filter((char) => char.name);
+
+  return safe;
 }
 
 /* テーマ */
@@ -1191,6 +1259,11 @@ function formatDateTime(timestamp){
   });
 }
 
+function getWeekdayJp(timestamp){
+  const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+  return weekdays[new Date(timestamp).getDay()];
+}
+
 function toDatetimeLocalValue(timestamp){
   const date = new Date(timestamp);
   const pad = (num) => String(num).padStart(2, "0");
@@ -1263,6 +1336,14 @@ function render(){
           const t = data.log[c.name + "_" + q.id];
           const done = isDone(q, t);
           const resetAtTime = done && t ? getResetTime(q, t) : null;
+          let cellText = done ? "済" : "未";
+
+          if(done && q.type === "three" && t && resetAtTime){
+            const doneWeekday = getWeekdayJp(t);
+            const resetWeekday = getWeekdayJp(resetAtTime);
+            cellText = `済<div class="cell-subtext"><span class="cell-subtext-line">実施: ${doneWeekday}</span><span class="cell-subtext-line">次回: ${resetWeekday}</span></div>`;
+          }
+
           html += `
             <td
               class="${done ? "done" : "notyet"} clickable toggle-cell"
@@ -1270,7 +1351,7 @@ function render(){
               data-quest="${q.id}"
               data-completed="${t || ""}"
               data-reset-at="${resetAtTime || ""}"
-            >${done ? "済" : "未"}</td>
+            >${cellText}</td>
           `;
         });
       }
@@ -1766,15 +1847,30 @@ function exportURL(){
   if(!p) return;
 
   try{
-    data = JSON.parse(decodeURIComponent(atob(p)));
-    save();
+    const importedRaw = JSON.parse(decodeURIComponent(atob(p)));
+    const imported = normalizeImportedData(importedRaw);
+
+    if(!hasMeaningfulData(imported)){
+      alert("URLデータが空か不正なため読み込みを中止しました");
+      return;
+    }
+
+    const shouldImport = !hasMeaningfulData(data) || confirm("URLのデータを読み込みますか？\n現在のローカルデータは上書きされます。\nキャンセルで現在データを維持します。");
+    if(shouldImport){
+      data = imported;
+      save();
+    }
   }catch(error){
     console.error("URL import failed", error);
+  }finally{
+    // 二重インポート防止: 読み込み後はURLパラメータを除去
+    history.replaceState(null, "", location.origin + location.pathname);
   }
 })();
 
 /* イベント */
 themeBtn.addEventListener("click", toggleTheme);
+resetSettingsBtn.addEventListener("click", resetAppSettings);
 exportUrlBtn.addEventListener("click", exportURL);
 
 startTimerBtn.addEventListener("click", startTimer);
