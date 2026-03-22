@@ -298,6 +298,70 @@ th{
   flex-wrap:wrap;
 }
 
+.entity-label{
+  cursor:context-menu;
+  border-radius:10px;
+  padding:4px 6px;
+}
+
+.entity-label:hover{
+  background:rgba(255,255,255,.08);
+}
+
+body.light .entity-label:hover{
+  background:rgba(91,140,255,.10);
+}
+
+.char-col-header{
+  transition:opacity .15s ease, box-shadow .15s ease;
+}
+
+.char-col-header.dragging{
+  opacity:.45;
+}
+
+.char-col-header.drag-over-left{
+  box-shadow:inset 3px 0 0 var(--accent);
+}
+
+.char-col-header.drag-over-right{
+  box-shadow:inset -3px 0 0 var(--accent);
+}
+
+.quest-row{
+  transition:opacity .15s ease, box-shadow .15s ease;
+}
+
+.quest-row.dragging{
+  opacity:.45;
+}
+
+.quest-row.drag-over-top > th,
+.quest-row.drag-over-top > td{
+  box-shadow:inset 0 3px 0 var(--accent);
+}
+
+.quest-row.drag-over-bottom > th,
+.quest-row.drag-over-bottom > td{
+  box-shadow:inset 0 -3px 0 var(--accent);
+}
+
+.quest-drag-handle{
+  cursor:grab;
+}
+
+.char-drag-handle{
+  cursor:grab;
+}
+
+.quest-drag-handle:active{
+  cursor:grabbing;
+}
+
+.char-drag-handle:active{
+  cursor:grabbing;
+}
+
 .metrics{
   display:grid;
   grid-template-columns:repeat(3,minmax(0,1fr));
@@ -310,6 +374,11 @@ th{
   border-radius:14px;
   background:rgba(255,255,255,.05);
   border:1px solid rgba(255,255,255,.08);
+}
+
+body.light .metric-card{
+  background:linear-gradient(180deg, rgba(255,255,255,.96) 0%, rgba(244,248,255,.92) 100%);
+  border-color:rgba(91,107,135,.16);
 }
 
 .metric-label{
@@ -338,6 +407,11 @@ th{
   border:1px solid rgba(255,255,255,.06);
 }
 
+body.light .chart-wrap{
+  background:linear-gradient(180deg, rgba(255,255,255,.98) 0%, rgba(238,244,255,.94) 100%);
+  border-color:rgba(91,107,135,.16);
+}
+
 #chart{
   width:100% !important;
   height:100% !important;
@@ -346,6 +420,106 @@ th{
 .url-box{
   display:grid;
   gap:10px;
+}
+
+.context-menu{
+  position:fixed;
+  z-index:50;
+  min-width:160px;
+  display:none;
+  padding:8px;
+  border-radius:14px;
+  background:var(--panel-solid);
+  border:1px solid var(--panel-border);
+  box-shadow:var(--shadow);
+}
+
+.context-menu.open{
+  display:grid;
+  gap:6px;
+}
+
+.context-menu-title{
+  padding:6px 8px 8px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+.menu-btn{
+  width:100%;
+  text-align:left;
+  border-radius:10px;
+  padding:10px 12px;
+  background:transparent;
+  color:var(--text);
+  border:1px solid transparent;
+  font-weight:700;
+}
+
+.menu-btn:hover{
+  background:rgba(255,255,255,.08);
+  border-color:var(--panel-border);
+}
+
+body.light .menu-btn:hover{
+  background:rgba(91,140,255,.10);
+}
+
+.menu-btn-danger{
+  color:var(--danger);
+}
+
+.context-submenu{
+  display:none;
+  gap:4px;
+  padding:4px;
+  border-top:1px solid var(--panel-border);
+  margin-top:6px;
+}
+
+.context-submenu.open{
+  display:grid;
+}
+
+.submenu-btn{
+  width:100%;
+  text-align:left;
+  border-radius:10px;
+  padding:8px 12px;
+  background:transparent;
+  color:var(--text);
+  border:1px solid transparent;
+  font-weight:700;
+  font-size:14px;
+}
+
+.submenu-btn:hover{
+  background:rgba(255,255,255,.08);
+  border-color:var(--panel-border);
+}
+
+body.light .submenu-btn:hover{
+  background:rgba(91,140,255,.10);
+}
+
+.time-info-popup{
+  display:none;
+  position:fixed;
+  z-index:40;
+  min-width:200px;
+  padding:12px;
+  border-radius:12px;
+  background:var(--panel-solid);
+  border:1px solid var(--panel-border);
+  box-shadow:var(--shadow);
+  font-size:13px;
+  line-height:1.6;
+  pointer-events:none;
+}
+
+.time-info-popup.open{
+  display:block;
 }
 
 dialog{
@@ -415,7 +589,6 @@ dialog::backdrop{
 <header>
   <div class="header-group">
     <button id="themeBtn" class="btn btn-secondary btn-icon" type="button">🌙</button>
-    <button id="exportTopBtn" class="btn btn-secondary" type="button">URL出力</button>
   </div>
 
   <div class="header-group">
@@ -521,11 +694,36 @@ dialog::backdrop{
   </div>
 </dialog>
 
+<dialog id="cellTimeEditDialog">
+  <h3 class="dialog-title">完了時刻を編集</h3>
+  <div class="dialog-body">
+    <input id="cellTimeInput" type="datetime-local">
+  </div>
+  <div class="dialog-actions">
+    <button class="btn btn-secondary" type="button" data-close="cellTimeEditDialog">CANCEL</button>
+    <button id="saveCellTimeBtn" class="btn btn-primary" type="button">SAVE</button>
+  </div>
+</dialog>
+
+<div id="contextMenu" class="context-menu" role="menu" aria-hidden="true">
+  <div id="contextMenuTitle" class="context-menu-title"></div>
+  <button id="renameMenuBtn" class="menu-btn" type="button">名前変更</button>
+  <button id="questTypeMenuBtn" class="menu-btn" type="button">クエスト種別変更</button>
+  <div id="questTypeSubmenu" class="context-submenu">
+    <button class="submenu-btn" type="button" data-type="daily">daily</button>
+    <button class="submenu-btn" type="button" data-type="three">three</button>
+    <button class="submenu-btn" type="button" data-type="weekly">weekly</button>
+  </div>
+  <button id="editCellTimeMenuBtn" class="menu-btn" type="button">完了時刻を編集</button>
+  <button id="deleteMenuBtn" class="menu-btn menu-btn-danger" type="button">削除</button>
+</div>
+
+<div id="timeInfoPopup" class="time-info-popup"></div>
+
 <script>
 const $ = (id) => document.getElementById(id);
 
 const themeBtn = $("themeBtn");
-const exportTopBtn = $("exportTopBtn");
 const exportUrlBtn = $("exportUrlBtn");
 const startTimerBtn = $("startTimerBtn");
 const stopTimerBtn = $("stopTimerBtn");
@@ -541,10 +739,21 @@ const urlBox = $("urlBox");
 
 const charDialog = $("charDialog");
 const questDialog = $("questDialog");
+const cellTimeEditDialog = $("cellTimeEditDialog");
 const charNameEl = $("charName");
 const charLvEl = $("charLv");
 const questNameEl = $("questName");
 const questTypeEl = $("questType");
+const contextMenuEl = $("contextMenu");
+const contextMenuTitleEl = $("contextMenuTitle");
+const renameMenuBtn = $("renameMenuBtn");
+const questTypeMenuBtn = $("questTypeMenuBtn");
+ const questTypeSubmenuEl = $("questTypeSubmenu");
+const editCellTimeMenuBtn = $("editCellTimeMenuBtn");
+const deleteMenuBtn = $("deleteMenuBtn");
+const timeInfoPopupEl = $("timeInfoPopup");
+const cellTimeInputEl = $("cellTimeInput");
+const saveCellTimeBtn = $("saveCellTimeBtn");
 
 const togglePingBtn = $("togglePingBtn");
 const clearPingBtn = $("clearPingBtn");
@@ -555,6 +764,9 @@ const pingStateEl = $("pingState");
 const chartCanvas = $("chart");
 
 let data = JSON.parse(localStorage.getItem("data") || '{"chars":[],"quests":[],"log":{}}');
+let dragState = null;
+let contextTarget = null;
+let cellTimeEditTarget = null;
 
 function save(){
   localStorage.setItem("data", JSON.stringify(data));
@@ -656,6 +868,48 @@ function closeDialog(id){
   $(id).close();
 }
 
+function hideContextMenu(){
+  contextMenuEl.classList.remove("open");
+  contextMenuEl.setAttribute("aria-hidden", "true");
+  contextTarget = null;
+}
+
+function showContextMenu(x, y, target){
+  contextTarget = target;
+  
+  if(target.type === "cell"){
+    contextMenuTitleEl.textContent = `${target.charName} - クエスト`;
+    renameMenuBtn.style.display = "none";
+    questTypeMenuBtn.style.display = "none";
+    editCellTimeMenuBtn.style.display = "block";
+    deleteMenuBtn.style.display = "none";
+  }else if(target.type === "char"){
+    contextMenuTitleEl.textContent = `キャラ: ${target.label}`;
+    renameMenuBtn.style.display = "block";
+    questTypeMenuBtn.style.display = "none";
+    editCellTimeMenuBtn.style.display = "none";
+    deleteMenuBtn.style.display = "block";
+  }else if(target.type === "quest"){
+    contextMenuTitleEl.textContent = `クエスト: ${target.label}`;
+    renameMenuBtn.style.display = "block";
+    questTypeMenuBtn.style.display = "block";
+    editCellTimeMenuBtn.style.display = "none";
+    deleteMenuBtn.style.display = "block";
+  }
+  
+  questTypeSubmenuEl.classList.remove("open");
+  contextMenuEl.classList.add("open");
+  contextMenuEl.setAttribute("aria-hidden", "false");
+
+  const menuWidth = contextMenuEl.offsetWidth;
+  const menuHeight = contextMenuEl.offsetHeight;
+  const left = Math.min(x, window.innerWidth - menuWidth - 12);
+  const top = Math.min(y, window.innerHeight - menuHeight - 12);
+
+  contextMenuEl.style.left = `${Math.max(12, left)}px`;
+  contextMenuEl.style.top = `${Math.max(12, top)}px`;
+}
+
 /* キャラ */
 function saveChar(){
   const name = charNameEl.value.trim();
@@ -693,12 +947,138 @@ function saveQuest(){
   closeDialog("questDialog");
 }
 
+function renameChar(oldName){
+  const current = data.chars.find((char) => char.name === oldName);
+  if(!current) return;
+
+  const nextName = prompt("新しいキャラ名を入力してください", oldName);
+  if(nextName === null) return;
+
+  const trimmedName = nextName.trim();
+  if(!trimmedName){
+    alert("キャラ名を入力してください");
+    return;
+  }
+
+  if(trimmedName !== oldName && data.chars.some((char) => char.name === trimmedName)){
+    alert("重複");
+    return;
+  }
+
+  current.name = trimmedName;
+
+  const nextLog = {};
+  Object.entries(data.log).forEach(([key, value]) => {
+    if(key.startsWith(oldName + "_")){
+      nextLog[trimmedName + key.slice(oldName.length)] = value;
+    }else{
+      nextLog[key] = value;
+    }
+  });
+  data.log = nextLog;
+
+  save();
+  render();
+}
+
+function renameQuest(id){
+  const quest = data.quests.find((item) => item.id === id);
+  if(!quest) return;
+
+  const nextName = prompt("新しいクエスト名を入力してください", quest.name);
+  if(nextName === null) return;
+
+  const trimmedName = nextName.trim();
+  if(!trimmedName){
+    alert("クエスト名を入力してください");
+    return;
+  }
+
+  quest.name = trimmedName;
+  save();
+  render();
+}
+
+function updateQuestType(id, newType){
+  const quest = data.quests.find((item) => item.id === id);
+  if(!quest) return;
+
+  quest.type = newType;
+  save();
+  render();
+}
+
 /* トグル */
 function toggle(charName, questId){
   const key = charName + "_" + questId;
   data.log[key] = data.log[key] ? null : Date.now();
   save();
   render();
+}
+
+function moveChar(fromName, toName, placeAfter){
+  if(fromName === toName) return;
+
+  const fromIndex = data.chars.findIndex((char) => char.name === fromName);
+  const toIndex = data.chars.findIndex((char) => char.name === toName);
+
+  if(fromIndex < 0 || toIndex < 0) return;
+
+  const [movedChar] = data.chars.splice(fromIndex, 1);
+  let insertIndex = toIndex;
+
+  if(fromIndex < toIndex){
+    insertIndex -= 1;
+  }
+
+  if(placeAfter){
+    insertIndex += 1;
+  }
+
+  data.chars.splice(insertIndex, 0, movedChar);
+  save();
+  render();
+}
+
+function moveQuest(fromId, toId, placeAfter){
+  if(fromId === toId) return;
+
+  const fromIndex = data.quests.findIndex((quest) => quest.id === fromId);
+  const toIndex = data.quests.findIndex((quest) => quest.id === toId);
+
+  if(fromIndex < 0 || toIndex < 0) return;
+
+  const [movedQuest] = data.quests.splice(fromIndex, 1);
+  let insertIndex = toIndex;
+
+  if(fromIndex < toIndex){
+    insertIndex -= 1;
+  }
+
+  if(placeAfter){
+    insertIndex += 1;
+  }
+
+  data.quests.splice(insertIndex, 0, movedQuest);
+  save();
+  render();
+}
+
+function clearCharDragState(){
+  tableEl.querySelectorAll(".char-col-header").forEach((header) => {
+    header.classList.remove("dragging", "drag-over-left", "drag-over-right");
+  });
+}
+
+function clearQuestDragState(){
+  tableEl.querySelectorAll(".quest-row").forEach((row) => {
+    row.classList.remove("dragging", "drag-over-top", "drag-over-bottom");
+  });
+}
+
+function clearDragState(){
+  clearCharDragState();
+  clearQuestDragState();
 }
 
 /* 判定 */
@@ -732,16 +1112,129 @@ function isDone(q, t){
   return false;
 }
 
+function getResetTime(q, completedAt){
+  if(!completedAt) return null;
+
+  const doneAt = new Date(completedAt);
+  const nextReset = new Date(doneAt);
+
+  if(q.type === "daily"){
+    // 済になったタイミング以後のAM5時
+    nextReset.setHours(5, 0, 0, 0);
+    if(nextReset <= doneAt){
+      nextReset.setDate(nextReset.getDate() + 1);
+    }
+  }else if(q.type === "three"){
+    // 済になったタイミング以後の3回目のAM5時
+    nextReset.setHours(5, 0, 0, 0);
+    if(nextReset <= doneAt){
+      nextReset.setDate(nextReset.getDate() + 1);
+    }
+    // さらに2日空けて3回目のAM5時にする
+    nextReset.setDate(nextReset.getDate() + 2);
+  }else if(q.type === "weekly"){
+    // 済になったタイミング以後の火曜日正午
+    const currentDay = nextReset.getDay();
+    let daysUntilTuesday = (2 - currentDay + 7) % 7;
+    if(daysUntilTuesday === 0){
+      // 今日が火曜日の場合、正午以後なら来週の火曜日
+      nextReset.setHours(12, 0, 0, 0);
+      if(nextReset <= doneAt){
+        daysUntilTuesday = 7;
+      }
+    }
+    nextReset.setDate(nextReset.getDate() + daysUntilTuesday);
+    nextReset.setHours(12, 0, 0, 0);
+  }
+
+  return nextReset.getTime();
+}
+
+function autoResetExpired(){
+  const now = new Date();
+  let changed = false;
+
+  Object.keys(data.log).forEach((key) => {
+    const t = data.log[key];
+    if(!t) return;
+
+    const parts = key.split("_");
+    const questId = Number(parts[parts.length - 1]);
+    const q = data.quests.find((item) => item.id === questId);
+
+    if(!q) return;
+
+    const resetTime = getResetTime(q, t);
+    if(resetTime && now.getTime() >= resetTime){
+      data.log[key] = null;
+      changed = true;
+    }
+  });
+
+  if(changed){
+    save();
+    render();
+  }
+}
+
+setInterval(autoResetExpired, 1000);
+
+function formatDateTime(timestamp){
+  const date = new Date(timestamp);
+  return date.toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function toDatetimeLocalValue(timestamp){
+  const date = new Date(timestamp);
+  const pad = (num) => String(num).padStart(2, "0");
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hour = pad(date.getHours());
+  const minute = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function hideTimeInfoPopup(){
+  timeInfoPopupEl.classList.remove("open");
+}
+
+function showTimeInfoPopup(x, y, completedAt, resetAt){
+  let html = "<div style='color:var(--muted);font-weight:700;margin-bottom:8px;'>クエスト情報</div>";
+  html += `<div>完了時刻: <br/><span style='color:var(--accent);'>${formatDateTime(completedAt)}</span></div>`;
+  if(resetAt){
+    html += `<div style='margin-top:8px;'>次回リセット: <br/><span style='color:var(--accent);'>${formatDateTime(resetAt)}</span></div>`;
+  }
+
+  timeInfoPopupEl.innerHTML = html;
+  timeInfoPopupEl.classList.add("open");
+
+  const popupWidth = timeInfoPopupEl.offsetWidth;
+  const popupHeight = timeInfoPopupEl.offsetHeight;
+  const left = Math.min(x, window.innerWidth - popupWidth - 12);
+  const top = Math.min(y, window.innerHeight - popupHeight - 12);
+
+  timeInfoPopupEl.style.left = `${Math.max(12, left)}px`;
+  timeInfoPopupEl.style.top = `${Math.max(12, top)}px`;
+}
+
 /* 描画 */
 function render(){
   let html = "<tr><th>クエスト / キャラ</th>";
 
   data.chars.forEach((c) => {
     html += `
-      <th>
+      <th class="char-col-header" data-char-name="${escapeHtml(c.name)}">
         <div class="headCell">
-          <span>${escapeHtml(c.name)}${c.lv ? `(Lv${escapeHtml(c.lv)})` : ""}</span>
-          <button class="btn btn-secondary btn-icon delete-char-btn" type="button" data-name="${escapeHtml(c.name)}">×</button>
+          <button class="btn btn-secondary btn-icon char-drag-handle" type="button" draggable="true" data-name="${escapeHtml(c.name)}" title="ドラッグして並び替え">≡</button>
+          <span class="entity-label char-label" data-name="${escapeHtml(c.name)}">${escapeHtml(c.name)}${c.lv ? `(Lv${escapeHtml(c.lv)})` : ""}</span>
         </div>
       </th>
     `;
@@ -754,11 +1247,11 @@ function render(){
   }else{
     data.quests.forEach((q) => {
       html += `
-        <tr>
+        <tr class="quest-row" data-quest-id="${q.id}">
           <th>
             <div class="headCell">
-              <span>${escapeHtml(q.name)}</span>
-              <button class="btn btn-secondary btn-icon delete-quest-btn" type="button" data-id="${q.id}">×</button>
+              <button class="btn btn-secondary btn-icon quest-drag-handle" type="button" draggable="true" data-id="${q.id}" title="ドラッグして並び替え">≡</button>
+              <span class="entity-label quest-label" data-id="${q.id}">${escapeHtml(q.name)}</span>
             </div>
           </th>
       `;
@@ -769,11 +1262,14 @@ function render(){
         data.chars.forEach((c) => {
           const t = data.log[c.name + "_" + q.id];
           const done = isDone(q, t);
+          const resetAtTime = done && t ? getResetTime(q, t) : null;
           html += `
             <td
               class="${done ? "done" : "notyet"} clickable toggle-cell"
               data-char="${escapeHtml(c.name)}"
               data-quest="${q.id}"
+              data-completed="${t || ""}"
+              data-reset-at="${resetAtTime || ""}"
             >${done ? "済" : "未"}</td>
           `;
         });
@@ -810,15 +1306,7 @@ function delQuest(id){
 }
 
 tableEl.addEventListener("click", (event) => {
-  const deleteCharBtn = event.target.closest(".delete-char-btn");
-  if(deleteCharBtn){
-    delChar(deleteCharBtn.dataset.name);
-    return;
-  }
-
-  const deleteQuestBtn = event.target.closest(".delete-quest-btn");
-  if(deleteQuestBtn){
-    delQuest(Number(deleteQuestBtn.dataset.id));
+  if(event.target.closest(".quest-drag-handle") || event.target.closest(".char-drag-handle")){
     return;
   }
 
@@ -826,6 +1314,305 @@ tableEl.addEventListener("click", (event) => {
   if(cell){
     toggle(cell.dataset.char, Number(cell.dataset.quest));
   }
+});
+
+tableEl.addEventListener("mouseover", (event) => {
+  const cell = event.target.closest(".toggle-cell");
+  if(cell && cell.dataset.completed){
+    showTimeInfoPopup(event.clientX + 10, event.clientY + 10, Number(cell.dataset.completed), Number(cell.dataset.resetAt) || null);
+  }
+});
+
+tableEl.addEventListener("mouseout", (event) => {
+  const cell = event.target.closest(".toggle-cell");
+  if(cell){
+    hideTimeInfoPopup();
+  }
+});
+
+tableEl.addEventListener("contextmenu", (event) => {
+  const cell = event.target.closest(".toggle-cell");
+  if(cell && cell.dataset.completed){
+    event.preventDefault();
+    showContextMenu(event.clientX, event.clientY, {
+      type: "cell",
+      charName: cell.dataset.char,
+      questId: Number(cell.dataset.quest),
+      completedAt: Number(cell.dataset.completed),
+      resetAt: Number(cell.dataset.resetAt) || null
+    });
+    return;
+  }
+
+  const charLabel = event.target.closest(".char-label");
+  if(charLabel){
+    event.preventDefault();
+    showContextMenu(event.clientX, event.clientY, {
+      type: "char",
+      id: charLabel.dataset.name,
+      label: charLabel.textContent.trim()
+    });
+    return;
+  }
+
+  const questLabel = event.target.closest(".quest-label");
+  if(questLabel){
+    event.preventDefault();
+    showContextMenu(event.clientX, event.clientY, {
+      type: "quest",
+      id: Number(questLabel.dataset.id),
+      label: questLabel.textContent.trim()
+    });
+  }
+});
+
+renameMenuBtn.addEventListener("click", () => {
+  if(!contextTarget) return;
+
+  const target = contextTarget;
+  hideContextMenu();
+
+  if(target.type === "char"){
+    renameChar(target.id);
+    return;
+  }
+
+  renameQuest(target.id);
+});
+
+questTypeMenuBtn.addEventListener("click", () => {
+  questTypeSubmenuEl.classList.toggle("open");
+});
+
+questTypeSubmenuEl.querySelectorAll(".submenu-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if(!contextTarget || contextTarget.type !== "quest") return;
+
+    const newType = btn.dataset.type;
+    hideContextMenu();
+    updateQuestType(contextTarget.id, newType);
+  });
+});
+
+editCellTimeMenuBtn.addEventListener("click", () => {
+  if(!contextTarget || contextTarget.type !== "cell") return;
+
+  const target = contextTarget;
+  cellTimeEditTarget = {
+    charName: target.charName,
+    questId: target.questId
+  };
+  hideContextMenu();
+
+  // Pre-fill the input with current completion time
+  if(target.completedAt){
+    cellTimeInputEl.value = toDatetimeLocalValue(target.completedAt);
+  } else {
+    cellTimeInputEl.value = toDatetimeLocalValue(Date.now());
+  }
+
+  cellTimeEditDialog.showModal();
+});
+
+saveCellTimeBtn.addEventListener("click", () => {
+  if(!cellTimeEditTarget) return;
+
+  const inputValue = cellTimeInputEl.value;
+  
+  if(!inputValue){
+    alert("完了時刻を入力してください");
+    return;
+  }
+
+  // Convert datetime-local string to timestamp
+  const date = new Date(inputValue);
+  const timestamp = date.getTime();
+
+  // Update log entry
+  const key = cellTimeEditTarget.charName + "_" + cellTimeEditTarget.questId;
+  data.log[key] = timestamp;
+
+  save();
+  render();
+  cellTimeEditTarget = null;
+  closeDialog("cellTimeEditDialog");
+});
+
+cellTimeEditDialog.addEventListener("close", () => {
+  cellTimeEditTarget = null;
+});
+
+deleteMenuBtn.addEventListener("click", () => {
+  if(!contextTarget) return;
+
+  const target = contextTarget;
+  hideContextMenu();
+
+  if(target.type === "char"){
+    if(confirm(`キャラクター「${target.label}」を削除しますか？`)){
+      delChar(target.id);
+    }
+    return;
+  }
+
+  if(confirm(`クエスト「${target.label}」を削除しますか？`)){
+    delQuest(target.id);
+  }
+});
+
+document.addEventListener("click", (event) => {
+  if(!event.target.closest("#contextMenu")){
+    hideContextMenu();
+  }
+  if(!event.target.closest("#timeInfoPopup")){
+    hideTimeInfoPopup();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if(event.key === "Escape"){
+    hideContextMenu();
+    hideTimeInfoPopup();
+  }
+});
+
+window.addEventListener("resize", () => {
+  hideContextMenu();
+  hideTimeInfoPopup();
+});
+window.addEventListener("scroll", () => {
+  hideContextMenu();
+  hideTimeInfoPopup();
+}, true);
+
+tableEl.addEventListener("dragstart", (event) => {
+  const charHandle = event.target.closest(".char-drag-handle");
+  if(charHandle){
+    const header = charHandle.closest(".char-col-header");
+    if(!header) return;
+
+    dragState = {
+      type: "char",
+      id: header.dataset.charName
+    };
+
+    clearDragState();
+    header.classList.add("dragging");
+
+    if(event.dataTransfer){
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(dragState.id));
+    }
+    return;
+  }
+
+  const handle = event.target.closest(".quest-drag-handle");
+  if(!handle) return;
+
+  const row = handle.closest(".quest-row");
+  if(!row) return;
+
+  dragState = {
+    type: "quest",
+    id: Number(row.dataset.questId)
+  };
+
+  clearDragState();
+  row.classList.add("dragging");
+
+  if(event.dataTransfer){
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(dragState.id));
+  }
+});
+
+tableEl.addEventListener("dragover", (event) => {
+  if(dragState?.type === "char"){
+    const header = event.target.closest(".char-col-header");
+    if(!header) return;
+
+    event.preventDefault();
+    clearDragState();
+
+    const isDraggingHeader = header.dataset.charName === dragState.id;
+    if(isDraggingHeader){
+      header.classList.add("dragging");
+      return;
+    }
+
+    const rect = header.getBoundingClientRect();
+    const placeAfter = event.clientX > rect.left + rect.width / 2;
+    header.classList.add(placeAfter ? "drag-over-right" : "drag-over-left");
+    return;
+  }
+
+  const row = event.target.closest(".quest-row");
+  if(!row || dragState?.type !== "quest") return;
+
+  event.preventDefault();
+  clearDragState();
+
+  const isDraggingRow = Number(row.dataset.questId) === dragState.id;
+  if(isDraggingRow){
+    row.classList.add("dragging");
+    return;
+  }
+
+  const rect = row.getBoundingClientRect();
+  const placeAfter = event.clientY > rect.top + rect.height / 2;
+  row.classList.add(placeAfter ? "drag-over-bottom" : "drag-over-top");
+});
+
+tableEl.addEventListener("drop", (event) => {
+  if(dragState?.type === "char"){
+    const header = event.target.closest(".char-col-header");
+    if(!header) return;
+
+    event.preventDefault();
+    const targetCharName = header.dataset.charName;
+    const rect = header.getBoundingClientRect();
+    const placeAfter = event.clientX > rect.left + rect.width / 2;
+
+    clearDragState();
+
+    if(targetCharName !== dragState.id){
+      const fromLabel = dragState.id;
+      const toLabel = targetCharName;
+      const directionLabel = placeAfter ? "後ろ" : "前";
+      if(confirm(`キャラクター「${fromLabel}」を「${toLabel}」の${directionLabel}へ移動しますか？`)){
+        moveChar(dragState.id, targetCharName, placeAfter);
+      }
+    }
+
+    dragState = null;
+    return;
+  }
+
+  const row = event.target.closest(".quest-row");
+  if(!row || dragState?.type !== "quest") return;
+
+  event.preventDefault();
+  const targetQuestId = Number(row.dataset.questId);
+  const rect = row.getBoundingClientRect();
+  const placeAfter = event.clientY > rect.top + rect.height / 2;
+
+  clearDragState();
+
+  if(targetQuestId !== dragState.id){
+    const fromQuest = data.quests.find((quest) => quest.id === dragState.id);
+    const toQuest = data.quests.find((quest) => quest.id === targetQuestId);
+    const directionLabel = placeAfter ? "後ろ" : "前";
+    if(fromQuest && toQuest && confirm(`クエスト「${fromQuest.name}」を「${toQuest.name}」の${directionLabel}へ移動しますか？`)){
+      moveQuest(dragState.id, targetQuestId, placeAfter);
+    }
+  }
+
+  dragState = null;
+});
+
+tableEl.addEventListener("dragend", () => {
+  clearDragState();
+  dragState = null;
 });
 
 /* Ping */
@@ -988,7 +1775,6 @@ function exportURL(){
 
 /* イベント */
 themeBtn.addEventListener("click", toggleTheme);
-exportTopBtn.addEventListener("click", exportURL);
 exportUrlBtn.addEventListener("click", exportURL);
 
 startTimerBtn.addEventListener("click", startTimer);
