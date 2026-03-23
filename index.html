@@ -777,7 +777,7 @@ const pingMaxEl = $("pingMax");
 const pingStateEl = $("pingState");
 const chartCanvas = $("chart");
 
-let data = JSON.parse(localStorage.getItem("data") || '{"chars":[],"quests":[],"log":{}}');
+let data = loadData();
 let dragState = null;
 let contextTarget = null;
 let cellTimeEditTarget = null;
@@ -818,6 +818,26 @@ function escapeHtml(value){
   }[ch]));
 }
 
+function normalizeQuestType(type){
+  const value = String(type || "").toLowerCase();
+  if(value === "daily" || value === "three" || value === "weekly") return value;
+  if(["3days", "3day", "three-day", "threedays", "three_days", "3d"].includes(value)) return "three";
+  if(["week", "weeklyquest", "weekly_quest"].includes(value)) return "weekly";
+  return "daily";
+}
+
+function loadData(){
+  try{
+    const parsed = JSON.parse(localStorage.getItem("data") || '{"chars":[],"quests":[],"log":{}}');
+    const normalized = normalizeImportedData(parsed);
+    localStorage.setItem("data", JSON.stringify(normalized));
+    return normalized;
+  }catch(error){
+    console.error("Local data parse failed", error);
+    return { chars: [], quests: [], log: {} };
+  }
+}
+
 function hasMeaningfulData(obj){
   if(!obj) return false;
   const chars = Array.isArray(obj.chars) ? obj.chars : [];
@@ -839,7 +859,7 @@ function normalizeImportedData(raw){
     .map((quest) => ({
       id: Number(quest.id),
       name: String(quest.name || ""),
-      type: ["daily", "three", "weekly"].includes(quest.type) ? quest.type : "daily"
+      type: normalizeQuestType(quest.type)
     }));
 
   safe.chars = safe.chars.map((char) => ({
@@ -1399,7 +1419,7 @@ tableEl.addEventListener("click", (event) => {
 
 tableEl.addEventListener("mouseover", (event) => {
   const cell = event.target.closest(".toggle-cell");
-  if(cell && cell.dataset.completed){
+  if(cell && cell.classList.contains("done") && cell.dataset.completed){
     showTimeInfoPopup(event.clientX + 10, event.clientY + 10, Number(cell.dataset.completed), Number(cell.dataset.resetAt) || null);
   }
 });
