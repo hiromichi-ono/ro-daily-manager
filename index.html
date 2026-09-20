@@ -711,6 +711,7 @@ dialog::backdrop{
           <button id="togglePingBtn" class="btn btn-primary" type="button">Ping Monitor ON</button>
           <button id="clearPingBtn" class="btn btn-secondary" type="button">履歴クリア</button>
         </div>
+        <div class="subtle">直近6時間の推移（1分平均）を端末内に保存します。</div>
 
         <div class="metrics">
           <div class="metric-card">
@@ -718,11 +719,11 @@ dialog::backdrop{
             <div class="metric-value"><span id="pingNow">--</span><span class="metric-unit">ms</span></div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">平均</div>
+            <div class="metric-label">6時間平均</div>
             <div class="metric-value"><span id="pingAvg">--</span><span class="metric-unit">ms</span></div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">最大</div>
+            <div class="metric-label">6時間最大</div>
             <div class="metric-value"><span id="pingMax">--</span><span class="metric-unit">ms</span></div>
           </div>
         </div>
@@ -2028,7 +2029,11 @@ tableEl.addEventListener("dragend", () => {
 /* Ping */
 let pingOn = false;
 let pingTimer = null;
-let pingHistory = [];
+const PING_HISTORY_KEY = "pingHistory";
+const PING_HISTORY_WINDOW_MS = 6 * 60 * 60 * 1000;
+const PING_BUCKET_MS = 60 * 1000;
+const PING_CHART_BUCKETS = PING_HISTORY_WINDOW_MS / PING_BUCKET_MS;
+let pingHistory = loadPingHistory();
 
 completionChart = new Chart(completionChartCanvas, {
   type: "bar",
@@ -2070,14 +2075,14 @@ const pingChart = new Chart(chartCanvas, {
   data: {
     labels: [],
     datasets: [{
-      label: "Ping (ms)",
+      label: "Ping 1分平均 (ms)",
       data: [],
       borderColor: "#5b8cff",
       backgroundColor: "rgba(91,140,255,.18)",
       borderWidth: 2,
       tension: .3,
       fill: true,
-      pointRadius: 2,
+      pointRadius: 0,
       pointHoverRadius: 4
     }]
   },
@@ -2094,7 +2099,7 @@ const pingChart = new Chart(chartCanvas, {
     },
     scales: {
       x: {
-        ticks: { color: "#9fb0d0" },
+        ticks: { color: "#9fb0d0", maxRotation: 0, maxTicksLimit: 7 },
         grid: { color: "rgba(255,255,255,.08)" }
       },
       y: {
@@ -2116,7 +2121,75 @@ function updatePingUi(){
   togglePingBtn.classList.toggle("btn-primary", !pingOn);
 }
 
+function prunePingHistory(now = Date.now()){
+  const cutoff = now - PING_HISTORY_WINDOW_MS;
+  pingHistory = pingHistory.filter((entry) => entry.minute > cutoff);
+}
+
+function loadPingHistory(){
+  try{
+    const parsed = JSON.parse(localStorage.getItem(PING_HISTORY_KEY) || "[]");
+    if(!Array.isArray(parsed)) return [];
+
+    const normalized = parsed
+      .filter((entry) => (
+        Number.isFinite(Number(entry?.minute)) &&
+        Number.isFinite(Number(entry?.sum)) &&
+        Number.isFinite(Number(entry?.count)) && Number(entry.count) > 0 &&
+        Number.isFinite(Number(entry?.max)) &&
+        Number.isFinite(Number(entry?.last))
+      ))
+      .map((entry) => ({
+        minute: Math.floor(Number(entry.minute) / PING_BUCKET_MS) * PING_BUCKET_MS,
+        sum: Number(entry.sum),
+        count: Number(entry.count),
+        max: Number(entry.max),
+        last: Number(entry.last)
+      }))
+      .sort((a, b) => a.minute - b.minute);
+
+    const cutoff = Date.now() - PING_HISTORY_WINDOW_MS;
+    return normalized.filter((entry) => entry.minute > cutoff);
+  }catch(error){
+    console.error("Ping history parse failed", error);
+    return [];
+  }
+}
+
+function savePingHistory(){
+  try{
+    localStorage.setItem(PING_HISTORY_KEY, JSON.stringify(pingHistory));
+  }catch(error){
+    console.error("Ping history save failed", error);
+  }
+}
+
+function recordPing(ms, now = Date.now()){
+  const minute = Math.floor(now / PING_BUCKET_MS) * PING_BUCKET_MS;
+  const currentBucket = pingHistory[pingHistory.length - 1];
+
+  if(currentBucket && currentBucket.minute === minute){
+    currentBucket.sum += ms;
+    currentBucket.count += 1;
+    currentBucket.max = Math.max(currentBucket.max, ms);
+    currentBucket.last = ms;
+  }else{
+    pingHistory.push({ minute, sum: ms, count: 1, max: ms, last: ms });
+  }
+
+  prunePingHistory(now);
+  savePingHistory();
+}
+
+function formatPingTime(timestamp){
+  return new Date(timestamp).toLocaleTimeString("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function updatePingStats(){
+  prunePingHistory();
   if(!pingHistory.length){
     pingNowEl.textContent = "--";
     pingAvgEl.textContent = "--";
@@ -2124,9 +2197,11 @@ function updatePingStats(){
     return;
   }
 
-  const current = pingHistory[pingHistory.length - 1];
-  const avg = Math.round(pingHistory.reduce((a, b) => a + b, 0) / pingHistory.length);
-  const max = Math.max(...pingHistory);
+  const current = pingHistory[pingHistory.length - 1].last;
+  const total = pingHistory.reduce((sum, entry) => sum + entry.sum, 0);
+  const count = pingHistory.reduce((sum, entry) => sum + entry.count, 0);
+  const avg = Math.round(total / count);
+  const max = Math.max(...pingHistory.map((entry) => entry.max));
 
   pingNowEl.textContent = current;
   pingAvgEl.textContent = avg;
@@ -2134,8 +2209,19 @@ function updatePingStats(){
 }
 
 function refreshPingChart(){
-  pingChart.data.labels = pingHistory.map((_, i) => String(i + 1));
-  pingChart.data.datasets[0].data = [...pingHistory];
+  const currentMinute = Math.floor(Date.now() / PING_BUCKET_MS) * PING_BUCKET_MS;
+  const firstMinute = currentMinute - (PING_CHART_BUCKETS - 1) * PING_BUCKET_MS;
+  const averages = new Map(pingHistory.map((entry) => [
+    entry.minute,
+    Math.round(entry.sum / entry.count)
+  ]));
+  const minutes = Array.from(
+    { length: PING_CHART_BUCKETS },
+    (_, index) => firstMinute + index * PING_BUCKET_MS
+  );
+
+  pingChart.data.labels = minutes.map(formatPingTime);
+  pingChart.data.datasets[0].data = minutes.map((minute) => averages.get(minute) ?? null);
   pingChart.update();
 }
 
@@ -2149,8 +2235,7 @@ async function samplePing(){
     });
 
     const ms = Math.round(performance.now() - start);
-    pingHistory.push(ms);
-    if(pingHistory.length > 60) pingHistory.shift();
+    recordPing(ms);
 
     updatePingStats();
     refreshPingChart();
@@ -2188,12 +2273,14 @@ function togglePing(){
 
 function clearPing(){
   pingHistory = [];
+  localStorage.removeItem(PING_HISTORY_KEY);
   updatePingStats();
   refreshPingChart();
 }
 
 updatePingUi();
 updatePingStats();
+refreshPingChart();
 
 /* URL */
 function exportURL(){
