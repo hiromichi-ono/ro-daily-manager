@@ -429,6 +429,69 @@ body.light .chart-wrap{
   height:100% !important;
 }
 
+.completion-dashboard{
+  margin-top:18px;
+}
+
+.dashboard-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+}
+
+.dashboard-header .panel-title{
+  margin-bottom:0;
+}
+
+.dashboard-filter{
+  width:min(320px,100%);
+}
+
+.dashboard-metrics{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  margin-top:16px;
+}
+
+.metric-delta.positive{ color:var(--success); }
+.metric-delta.negative{ color:var(--danger); }
+
+.dashboard-insight{
+  margin-bottom:16px;
+  padding:12px 14px;
+  border-radius:14px;
+  color:var(--text);
+  background:linear-gradient(135deg,rgba(91,140,255,.14),rgba(124,92,255,.10));
+  border:1px solid rgba(91,140,255,.24);
+  font-weight:700;
+}
+
+.dashboard-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);
+  gap:16px;
+}
+
+.completion-table table{
+  min-width:0;
+}
+
+.completion-table th,
+.completion-table td{
+  text-align:right;
+}
+
+.completion-table th:first-child,
+.completion-table td:first-child{
+  text-align:left;
+}
+
+#completionChart{
+  width:100% !important;
+  height:100% !important;
+}
+
 .url-box{
   display:grid;
   gap:10px;
@@ -576,6 +639,10 @@ dialog::backdrop{
   .grid{
     grid-template-columns:1fr;
   }
+
+  .dashboard-layout{
+    grid-template-columns:1fr;
+  }
 }
 
 @media (max-width:720px){
@@ -677,6 +744,48 @@ dialog::backdrop{
       </section>
     </div>
   </div>
+
+  <section class="panel completion-dashboard">
+    <div class="dashboard-header">
+      <h2 class="panel-title">攻略実績</h2>
+      <select id="dashboardQuestFilter" class="dashboard-filter" aria-label="表示するダンジョン">
+        <option value="all">全ダンジョン / クエスト</option>
+      </select>
+    </div>
+
+    <div class="metrics dashboard-metrics">
+      <div class="metric-card">
+        <div class="metric-label">今月合計</div>
+        <div class="metric-value"><span id="completionThisMonth">0</span><span class="metric-unit">回</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">先月合計</div>
+        <div class="metric-value"><span id="completionLastMonth">0</span><span class="metric-unit">回</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">先月との差</div>
+        <div class="metric-value metric-delta" id="completionDelta">±0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">累計</div>
+        <div class="metric-value"><span id="completionTotal">0</span><span class="metric-unit">回</span></div>
+      </div>
+    </div>
+
+    <div id="completionInsight" class="dashboard-insight">攻略履歴が増えると、月ごとのペースを振り返れます。</div>
+
+    <div class="dashboard-layout">
+      <div class="chart-wrap">
+        <canvas id="completionChart"></canvas>
+      </div>
+      <div class="tableWrap completion-table">
+        <table>
+          <thead><tr><th>ダンジョン / クエスト</th><th>今月</th><th>累計</th></tr></thead>
+          <tbody id="completionQuestRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
 </div>
 
 <dialog id="charDialog">
@@ -776,11 +885,20 @@ const pingAvgEl = $("pingAvg");
 const pingMaxEl = $("pingMax");
 const pingStateEl = $("pingState");
 const chartCanvas = $("chart");
+const completionChartCanvas = $("completionChart");
+const dashboardQuestFilterEl = $("dashboardQuestFilter");
+const completionThisMonthEl = $("completionThisMonth");
+const completionLastMonthEl = $("completionLastMonth");
+const completionDeltaEl = $("completionDelta");
+const completionTotalEl = $("completionTotal");
+const completionInsightEl = $("completionInsight");
+const completionQuestRowsEl = $("completionQuestRows");
 
 let data = loadData();
 let dragState = null;
 let contextTarget = null;
 let cellTimeEditTarget = null;
+let completionChart = null;
 
 function save(){
   localStorage.setItem("data", JSON.stringify(data));
@@ -790,7 +908,7 @@ function resetAppSettings(){
   const ok = confirm("設定と進捗データを初期化します。\nこの操作は元に戻せません。\n実行しますか？");
   if(!ok) return;
 
-  data = { chars: [], quests: [], log: {} };
+  data = { chars: [], quests: [], log: {}, history: [] };
   localStorage.removeItem("data");
   localStorage.removeItem("theme");
 
@@ -834,7 +952,7 @@ function loadData(){
     return normalized;
   }catch(error){
     console.error("Local data parse failed", error);
-    return { chars: [], quests: [], log: {} };
+    return { chars: [], quests: [], log: {}, history: [] };
   }
 }
 
@@ -843,14 +961,16 @@ function hasMeaningfulData(obj){
   const chars = Array.isArray(obj.chars) ? obj.chars : [];
   const quests = Array.isArray(obj.quests) ? obj.quests : [];
   const log = obj.log && typeof obj.log === "object" ? obj.log : {};
-  return chars.length > 0 || quests.length > 0 || Object.keys(log).length > 0;
+  const completionHistory = Array.isArray(obj.history) ? obj.history : [];
+  return chars.length > 0 || quests.length > 0 || Object.keys(log).length > 0 || completionHistory.length > 0;
 }
 
 function normalizeImportedData(raw){
   const safe = {
     chars: Array.isArray(raw?.chars) ? raw.chars : [],
     quests: Array.isArray(raw?.quests) ? raw.quests : [],
-    log: raw?.log && typeof raw.log === "object" ? raw.log : {}
+    log: raw?.log && typeof raw.log === "object" ? raw.log : {},
+    history: Array.isArray(raw?.history) ? raw.history : []
   };
 
   // quest id が数値のものだけ保持
@@ -866,6 +986,20 @@ function normalizeImportedData(raw){
     name: String(char?.name || ""),
     lv: String(char?.lv || "")
   })).filter((char) => char.name);
+
+  safe.history = safe.history
+    .filter((entry) => (
+      Number.isFinite(Number(entry?.questId)) &&
+      String(entry?.charName || "").trim() &&
+      Number.isFinite(Number(entry?.completedAt)) &&
+      Number(entry.completedAt) > 0
+    ))
+    .map((entry) => ({
+      questId: Number(entry.questId),
+      questName: String(entry.questName || safe.quests.find((quest) => quest.id === Number(entry.questId))?.name || "削除済みクエスト"),
+      charName: String(entry.charName).trim(),
+      completedAt: Number(entry.completedAt)
+    }));
 
   return safe;
 }
@@ -1064,6 +1198,11 @@ function renameChar(oldName){
     }
   });
   data.log = nextLog;
+  data.history.forEach((entry) => {
+    if(entry.charName === oldName){
+      entry.charName = trimmedName;
+    }
+  });
 
   save();
   render();
@@ -1083,6 +1222,11 @@ function renameQuest(id){
   }
 
   quest.name = trimmedName;
+  data.history.forEach((entry) => {
+    if(entry.questId === id){
+      entry.questName = trimmedName;
+    }
+  });
   save();
   render();
 }
@@ -1099,9 +1243,35 @@ function updateQuestType(id, newType){
 /* トグル */
 function toggle(charName, questId){
   const key = charName + "_" + questId;
-  data.log[key] = data.log[key] ? null : Date.now();
+  if(data.log[key]){
+    data.log[key] = null;
+  }else{
+    const completedAt = Date.now();
+    const quest = data.quests.find((item) => item.id === questId);
+    data.log[key] = completedAt;
+
+    if(quest && shouldRecordCompletion(charName, quest, completedAt)){
+      data.history.push({
+        questId: quest.id,
+        questName: quest.name,
+        charName,
+        completedAt
+      });
+    }
+  }
   save();
   render();
+}
+
+function shouldRecordCompletion(charName, quest, completedAt){
+  const latest = data.history
+    .filter((entry) => entry.charName === charName && entry.questId === quest.id)
+    .reduce((result, entry) => !result || entry.completedAt > result.completedAt ? entry : result, null);
+
+  if(!latest) return true;
+
+  const nextReset = getResetTime(quest, latest.completedAt);
+  return Boolean(nextReset && completedAt >= nextReset);
 }
 
 function moveChar(fromName, toName, placeAfter){
@@ -1324,6 +1494,123 @@ function showTimeInfoPopup(x, y, completedAt, resetAt){
   timeInfoPopupEl.style.top = `${Math.max(12, top)}px`;
 }
 
+function getMonthKey(timestamp){
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getShiftedMonthKey(timestamp, offset){
+  const date = new Date(timestamp);
+  date.setDate(1);
+  date.setMonth(date.getMonth() + offset);
+  return getMonthKey(date);
+}
+
+function formatMonthLabel(monthKey){
+  const [year, month] = monthKey.split("-");
+  return `${year}年${Number(month)}月`;
+}
+
+function getDashboardQuestOptions(){
+  const quests = new Map();
+  data.quests.forEach((quest) => quests.set(quest.id, quest.name));
+  data.history.forEach((entry) => {
+    if(!quests.has(entry.questId)){
+      quests.set(entry.questId, entry.questName || "削除済みクエスト");
+    }
+  });
+  return [...quests.entries()].map(([id, name]) => ({ id, name }));
+}
+
+function getContinuousMonthKeys(entries){
+  const currentKey = getMonthKey(Date.now());
+  if(!entries.length){
+    return Array.from({ length: 6 }, (_, index) => getShiftedMonthKey(Date.now(), index - 5));
+  }
+
+  const earliest = entries.reduce((result, entry) => Math.min(result, entry.completedAt), entries[0].completedAt);
+  const keys = [];
+  let cursor = getMonthKey(earliest);
+  while(cursor <= currentKey){
+    keys.push(cursor);
+    const [year, month] = cursor.split("-").map(Number);
+    cursor = getShiftedMonthKey(new Date(year, month - 1, 1), 1);
+  }
+  return keys;
+}
+
+function renderCompletionInsight(monthKeys, monthlyCounts){
+  const total = Object.values(monthlyCounts).reduce((sum, count) => sum + count, 0);
+  if(total === 0){
+    completionInsightEl.textContent = "攻略履歴が増えると、月ごとのペースを振り返れます。";
+    return;
+  }
+
+  const currentKey = getMonthKey(Date.now());
+  const completedMonths = monthKeys.filter((key) => key < currentKey);
+  if(completedMonths.length < 2){
+    completionInsightEl.textContent = "攻略履歴が2か月以上たまると、頑張った月と控えめだった月を比較できます。";
+    return;
+  }
+
+  const bestKey = completedMonths.reduce((best, key) => monthlyCounts[key] > monthlyCounts[best] ? key : best, completedMonths[0]);
+  const quietKey = completedMonths.reduce((quiet, key) => monthlyCounts[key] < monthlyCounts[quiet] ? key : quiet, completedMonths[0]);
+  completionInsightEl.textContent = `${formatMonthLabel(bestKey)}は${monthlyCounts[bestKey]}回で頑張った月。${formatMonthLabel(quietKey)}は${monthlyCounts[quietKey]}回で少し控えめでした。`;
+}
+
+function renderDashboard(){
+  const selectedBefore = dashboardQuestFilterEl.value || "all";
+  const questOptions = getDashboardQuestOptions();
+  dashboardQuestFilterEl.innerHTML = `<option value="all">全ダンジョン / クエスト</option>${questOptions.map((quest) => (
+    `<option value="${quest.id}">${escapeHtml(quest.name)}</option>`
+  )).join("")}`;
+  dashboardQuestFilterEl.value = questOptions.some((quest) => String(quest.id) === selectedBefore) ? selectedBefore : "all";
+
+  const selectedQuestId = dashboardQuestFilterEl.value === "all" ? null : Number(dashboardQuestFilterEl.value);
+  const filteredHistory = selectedQuestId === null
+    ? data.history
+    : data.history.filter((entry) => entry.questId === selectedQuestId);
+  const thisMonthKey = getMonthKey(Date.now());
+  const lastMonthKey = getShiftedMonthKey(Date.now(), -1);
+  const thisMonthCount = filteredHistory.filter((entry) => getMonthKey(entry.completedAt) === thisMonthKey).length;
+  const lastMonthCount = filteredHistory.filter((entry) => getMonthKey(entry.completedAt) === lastMonthKey).length;
+  const delta = thisMonthCount - lastMonthCount;
+
+  completionThisMonthEl.textContent = thisMonthCount;
+  completionLastMonthEl.textContent = lastMonthCount;
+  completionDeltaEl.textContent = delta === 0 ? "±0" : `${delta > 0 ? "+" : ""}${delta}`;
+  completionDeltaEl.classList.toggle("positive", delta > 0);
+  completionDeltaEl.classList.toggle("negative", delta < 0);
+  completionTotalEl.textContent = filteredHistory.length;
+
+  const monthKeys = getContinuousMonthKeys(filteredHistory);
+  const monthlyCounts = Object.fromEntries(monthKeys.map((key) => [key, 0]));
+  filteredHistory.forEach((entry) => {
+    const key = getMonthKey(entry.completedAt);
+    monthlyCounts[key] = (monthlyCounts[key] || 0) + 1;
+  });
+
+  renderCompletionInsight(monthKeys, monthlyCounts);
+
+  if(completionChart){
+    completionChart.data.labels = monthKeys.map(formatMonthLabel);
+    completionChart.data.datasets[0].label = selectedQuestId === null
+      ? "全体の攻略回数"
+      : `${questOptions.find((quest) => quest.id === selectedQuestId)?.name || "クエスト"}の攻略回数`;
+    completionChart.data.datasets[0].data = monthKeys.map((key) => monthlyCounts[key] || 0);
+    completionChart.update();
+  }
+
+  completionQuestRowsEl.innerHTML = questOptions.length
+    ? questOptions.map((quest) => {
+        const questHistory = data.history.filter((entry) => entry.questId === quest.id);
+        const monthly = questHistory.filter((entry) => getMonthKey(entry.completedAt) === thisMonthKey).length;
+        const deleted = !data.quests.some((item) => item.id === quest.id);
+        return `<tr><td>${escapeHtml(quest.name)}${deleted ? ` <span class="subtle">(削除済み)</span>` : ""}</td><td>${monthly}回</td><td>${questHistory.length}回</td></tr>`;
+      }).join("")
+    : `<tr><td colspan="3" class="empty">攻略履歴がありません</td></tr>`;
+}
+
 /* 描画 */
 function render(){
   let html = "<tr><th>クエスト / キャラ</th>";
@@ -1387,6 +1674,7 @@ function render(){
   }
 
   tableEl.innerHTML = html;
+  renderDashboard();
 }
 
 /* 削除 */
@@ -1534,10 +1822,25 @@ saveCellTimeBtn.addEventListener("click", () => {
   // Convert datetime-local string to timestamp
   const date = new Date(inputValue);
   const timestamp = date.getTime();
+  if(!Number.isFinite(timestamp)){
+    alert("正しい完了時刻を入力してください");
+    return;
+  }
 
   // Update log entry
   const key = cellTimeEditTarget.charName + "_" + cellTimeEditTarget.questId;
+  const previousTimestamp = data.log[key];
   data.log[key] = timestamp;
+
+  // この機能で記録した現在の攻略履歴があれば、時刻編集を追従させる
+  const historyEntry = data.history.find((entry) => (
+    entry.charName === cellTimeEditTarget.charName &&
+    entry.questId === cellTimeEditTarget.questId &&
+    entry.completedAt === previousTimestamp
+  ));
+  if(historyEntry){
+    historyEntry.completedAt = timestamp;
+  }
 
   save();
   render();
@@ -1725,7 +2028,42 @@ tableEl.addEventListener("dragend", () => {
 /* Ping */
 let pingOn = false;
 let pingTimer = null;
-let history = [];
+let pingHistory = [];
+
+completionChart = new Chart(completionChartCanvas, {
+  type: "bar",
+  data: {
+    labels: [],
+    datasets: [{
+      label: "全体の攻略回数",
+      data: [],
+      borderColor: "#5b8cff",
+      backgroundColor: "rgba(91,140,255,.55)",
+      borderWidth: 1,
+      borderRadius: 8
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: { color: "#9fb0d0" }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: "#9fb0d0" },
+        grid: { color: "rgba(255,255,255,.08)" }
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { color: "#9fb0d0", precision: 0 },
+        grid: { color: "rgba(255,255,255,.08)" }
+      }
+    }
+  }
+});
 
 const pingChart = new Chart(chartCanvas, {
   type: "line",
@@ -1779,16 +2117,16 @@ function updatePingUi(){
 }
 
 function updatePingStats(){
-  if(!history.length){
+  if(!pingHistory.length){
     pingNowEl.textContent = "--";
     pingAvgEl.textContent = "--";
     pingMaxEl.textContent = "--";
     return;
   }
 
-  const current = history[history.length - 1];
-  const avg = Math.round(history.reduce((a, b) => a + b, 0) / history.length);
-  const max = Math.max(...history);
+  const current = pingHistory[pingHistory.length - 1];
+  const avg = Math.round(pingHistory.reduce((a, b) => a + b, 0) / pingHistory.length);
+  const max = Math.max(...pingHistory);
 
   pingNowEl.textContent = current;
   pingAvgEl.textContent = avg;
@@ -1796,8 +2134,8 @@ function updatePingStats(){
 }
 
 function refreshPingChart(){
-  pingChart.data.labels = history.map((_, i) => String(i + 1));
-  pingChart.data.datasets[0].data = [...history];
+  pingChart.data.labels = pingHistory.map((_, i) => String(i + 1));
+  pingChart.data.datasets[0].data = [...pingHistory];
   pingChart.update();
 }
 
@@ -1811,8 +2149,8 @@ async function samplePing(){
     });
 
     const ms = Math.round(performance.now() - start);
-    history.push(ms);
-    if(history.length > 60) history.shift();
+    pingHistory.push(ms);
+    if(pingHistory.length > 60) pingHistory.shift();
 
     updatePingStats();
     refreshPingChart();
@@ -1849,7 +2187,7 @@ function togglePing(){
 }
 
 function clearPing(){
-  history = [];
+  pingHistory = [];
   updatePingStats();
   refreshPingChart();
 }
@@ -1910,6 +2248,7 @@ saveQuestBtn.addEventListener("click", saveQuest);
 
 togglePingBtn.addEventListener("click", togglePing);
 clearPingBtn.addEventListener("click", clearPing);
+dashboardQuestFilterEl.addEventListener("change", renderDashboard);
 
 document.querySelectorAll("[data-close]").forEach((btn) => {
   btn.addEventListener("click", () => closeDialog(btn.dataset.close));
