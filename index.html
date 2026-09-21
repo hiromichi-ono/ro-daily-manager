@@ -137,8 +137,21 @@ body.light header{
 
 .grid{
   display:grid;
-  grid-template-columns:1.5fr 1fr;
+  grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);
   gap:18px;
+}
+
+.ping-monitor-panel{
+  margin-bottom:18px;
+}
+
+.ping-monitor-panel .chart-wrap{
+  height:440px;
+}
+
+.secondary-grid > .panel{
+  margin-top:0;
+  min-width:0;
 }
 
 .panel{
@@ -754,7 +767,7 @@ dialog::backdrop{
 
 @media (max-width:960px){
   .grid{
-    grid-template-columns:1fr;
+    grid-template-columns:minmax(0,1fr);
   }
 
   .dashboard-layout{
@@ -779,6 +792,10 @@ dialog::backdrop{
 
   .metrics{
     grid-template-columns:1fr;
+  }
+
+  .ping-monitor-panel .chart-wrap{
+    height:320px;
   }
 }
 </style>
@@ -811,70 +828,66 @@ dialog::backdrop{
     <span id="pingState" class="status-chip off">STOPPED</span>
   </div>
 
-  <div class="grid">
-    <div>
-      <section class="panel">
-        <h2 class="panel-title">デイリー管理</h2>
-        <div class="toolbar">
-          <button id="openCharBtn" class="btn btn-primary" type="button">キャラ編集</button>
-          <button id="openQuestBtn" class="btn btn-secondary" type="button">クエスト編集</button>
-        </div>
-        <div class="tableWrap">
-          <table id="table"></table>
-        </div>
-      </section>
+  <section class="panel ping-monitor-panel">
+    <h2 class="panel-title">Ping Monitor</h2>
+    <div class="toolbar">
+      <button id="togglePingBtn" class="btn btn-primary" type="button">Ping Monitor ON</button>
+      <button id="clearPingBtn" class="btn btn-secondary" type="button">履歴クリア</button>
+      <button id="openPingAnalysisBtn" class="btn btn-secondary" type="button">拡大分析</button>
+      <label class="ping-range-control">表示範囲
+        <select id="pingLiveRange">
+          <option value="1">1分</option>
+          <option value="5">5分</option>
+          <option value="15">15分</option>
+          <option value="30">30分</option>
+          <option value="60">60分</option>
+        </select>
+      </label>
+    </div>
+    <div class="subtle">通常グラフは1秒間隔で最大60分。拡大分析用に6時間分を端末内へ保存します。</div>
+
+    <div class="metrics">
+      <div class="metric-card">
+        <div class="metric-label">現在</div>
+        <div class="metric-value"><span id="pingNow">--</span><span class="metric-unit">ms</span></div>
+      </div>
+      <div class="metric-card">
+        <div id="pingAvgLabel" class="metric-label">1分平均</div>
+        <div class="metric-value"><span id="pingAvg">--</span><span class="metric-unit">ms</span></div>
+      </div>
+      <div class="metric-card">
+        <div id="pingMaxLabel" class="metric-label">1分最大</div>
+        <div class="metric-value"><span id="pingMax">--</span><span class="metric-unit">ms</span></div>
+      </div>
     </div>
 
-    <div>
-      <section class="panel">
-        <h2 class="panel-title">Ping Monitor</h2>
-        <div class="toolbar">
-          <button id="togglePingBtn" class="btn btn-primary" type="button">Ping Monitor ON</button>
-          <button id="clearPingBtn" class="btn btn-secondary" type="button">履歴クリア</button>
-          <button id="openPingAnalysisBtn" class="btn btn-secondary" type="button">拡大分析</button>
-          <label class="ping-range-control">表示範囲
-            <select id="pingLiveRange">
-              <option value="1">1分</option>
-              <option value="5">5分</option>
-              <option value="15">15分</option>
-              <option value="30">30分</option>
-              <option value="60">60分</option>
-            </select>
-          </label>
-        </div>
-        <div class="subtle">通常グラフは1秒間隔で最大60分。拡大分析用に6時間分を端末内へ保存します。</div>
-
-        <div class="metrics">
-          <div class="metric-card">
-            <div class="metric-label">現在</div>
-            <div class="metric-value"><span id="pingNow">--</span><span class="metric-unit">ms</span></div>
-          </div>
-          <div class="metric-card">
-            <div id="pingAvgLabel" class="metric-label">1分平均</div>
-            <div class="metric-value"><span id="pingAvg">--</span><span class="metric-unit">ms</span></div>
-          </div>
-          <div class="metric-card">
-            <div id="pingMaxLabel" class="metric-label">1分最大</div>
-            <div class="metric-value"><span id="pingMax">--</span><span class="metric-unit">ms</span></div>
-          </div>
-        </div>
-
-        <div class="chart-wrap">
-          <canvas id="chart"></canvas>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel-title">URL共有</h2>
-        <div class="url-box">
-          <div class="subtle">現在の状態を URL に埋め込みます。</div>
-          <textarea id="urlBox" placeholder="ここに共有URLが表示されます"></textarea>
-          <div class="toolbar" style="margin-bottom:0">
-            <button id="exportUrlBtn" class="btn btn-primary" type="button">URLを生成してコピー</button>
-          </div>
-        </div>
-      </section>
+    <div class="chart-wrap">
+      <canvas id="chart"></canvas>
     </div>
+  </section>
+
+  <div class="grid secondary-grid">
+    <section class="panel">
+      <h2 class="panel-title">デイリー管理</h2>
+      <div class="toolbar">
+        <button id="openCharBtn" class="btn btn-primary" type="button">キャラ編集</button>
+        <button id="openQuestBtn" class="btn btn-secondary" type="button">クエスト編集</button>
+      </div>
+      <div class="tableWrap">
+        <table id="table"></table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel-title">URL共有</h2>
+      <div class="url-box">
+        <div class="subtle">現在の状態を URL に埋め込みます。</div>
+        <textarea id="urlBox" placeholder="ここに共有URLが表示されます"></textarea>
+        <div class="toolbar" style="margin-bottom:0">
+          <button id="exportUrlBtn" class="btn btn-primary" type="button">URLを生成してコピー</button>
+        </div>
+      </div>
+    </section>
   </div>
 
   <section class="panel completion-dashboard">
