@@ -429,6 +429,68 @@ body.light .chart-wrap{
   height:100% !important;
 }
 
+.ping-analysis-dialog{
+  width:min(1440px,calc(100vw - 24px));
+  max-width:none;
+  height:min(920px,calc(100vh - 24px));
+  max-height:none;
+  overflow:auto;
+}
+
+.analysis-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:14px;
+}
+
+.analysis-header .dialog-title{
+  margin:0;
+}
+
+.analysis-help{
+  margin-bottom:12px;
+}
+
+.analysis-chart-wrap{
+  height:400px;
+  cursor:crosshair;
+  user-select:none;
+}
+
+#pingAnalysisChart{
+  width:100% !important;
+  height:100% !important;
+  touch-action:none;
+}
+
+.analysis-range{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  margin:12px 0;
+}
+
+.analysis-range-label{
+  font-weight:800;
+}
+
+.analysis-metrics{
+  grid-template-columns:repeat(5,minmax(0,1fr));
+}
+
+.analysis-table{
+  max-height:300px;
+  overflow:auto;
+}
+
+.analysis-table table{
+  min-width:720px;
+}
+
 .completion-dashboard{
   margin-top:18px;
 }
@@ -643,6 +705,10 @@ dialog::backdrop{
   .dashboard-layout{
     grid-template-columns:1fr;
   }
+
+  .analysis-metrics{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
 }
 
 @media (max-width:720px){
@@ -710,8 +776,9 @@ dialog::backdrop{
         <div class="toolbar">
           <button id="togglePingBtn" class="btn btn-primary" type="button">Ping Monitor ON</button>
           <button id="clearPingBtn" class="btn btn-secondary" type="button">履歴クリア</button>
+          <button id="openPingAnalysisBtn" class="btn btn-secondary" type="button">拡大分析</button>
         </div>
-        <div class="subtle">直近6時間の推移（1分平均）を端末内に保存します。</div>
+        <div class="subtle">通常グラフは直近1分。拡大分析用に6時間分を端末内へ保存します。</div>
 
         <div class="metrics">
           <div class="metric-card">
@@ -719,11 +786,11 @@ dialog::backdrop{
             <div class="metric-value"><span id="pingNow">--</span><span class="metric-unit">ms</span></div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">6時間平均</div>
+            <div class="metric-label">1分平均</div>
             <div class="metric-value"><span id="pingAvg">--</span><span class="metric-unit">ms</span></div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">6時間最大</div>
+            <div class="metric-label">1分最大</div>
             <div class="metric-value"><span id="pingMax">--</span><span class="metric-unit">ms</span></div>
           </div>
         </div>
@@ -788,6 +855,49 @@ dialog::backdrop{
     </div>
   </section>
 </div>
+
+<dialog id="pingAnalysisDialog" class="ping-analysis-dialog">
+  <div class="analysis-header">
+    <h3 class="dialog-title">Ping 詳細分析</h3>
+    <button class="btn btn-secondary" type="button" data-close="pingAnalysisDialog">閉じる</button>
+  </div>
+  <div class="subtle analysis-help">グラフ上を横方向にドラッグして分析範囲を選択できます。</div>
+  <div class="chart-wrap analysis-chart-wrap">
+    <canvas id="pingAnalysisChart"></canvas>
+  </div>
+  <div class="analysis-range">
+    <div id="pingAnalysisRange" class="analysis-range-label">直近6時間</div>
+    <button id="resetPingAnalysisRangeBtn" class="btn btn-secondary" type="button">全6時間に戻す</button>
+  </div>
+  <div class="metrics analysis-metrics">
+    <div class="metric-card">
+      <div class="metric-label">平均</div>
+      <div class="metric-value"><span id="pingAnalysisAvg">--</span><span class="metric-unit">ms</span></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">最小</div>
+      <div class="metric-value"><span id="pingAnalysisMin">--</span><span class="metric-unit">ms</span></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">最大</div>
+      <div class="metric-value"><span id="pingAnalysisMax">--</span><span class="metric-unit">ms</span></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">測定数</div>
+      <div class="metric-value" id="pingAnalysisCount">0</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">失敗数</div>
+      <div class="metric-value" id="pingAnalysisErrors">0</div>
+    </div>
+  </div>
+  <div class="tableWrap analysis-table">
+    <table>
+      <thead><tr><th>時刻</th><th>平均</th><th>最小</th><th>最大</th><th>測定数</th><th>失敗</th></tr></thead>
+      <tbody id="pingAnalysisRows"></tbody>
+    </table>
+  </div>
+</dialog>
 
 <dialog id="charDialog">
   <h3 class="dialog-title">キャラ編集</h3>
@@ -881,11 +991,22 @@ const saveCellTimeBtn = $("saveCellTimeBtn");
 
 const togglePingBtn = $("togglePingBtn");
 const clearPingBtn = $("clearPingBtn");
+const openPingAnalysisBtn = $("openPingAnalysisBtn");
 const pingNowEl = $("pingNow");
 const pingAvgEl = $("pingAvg");
 const pingMaxEl = $("pingMax");
 const pingStateEl = $("pingState");
 const chartCanvas = $("chart");
+const pingAnalysisDialog = $("pingAnalysisDialog");
+const pingAnalysisChartCanvas = $("pingAnalysisChart");
+const resetPingAnalysisRangeBtn = $("resetPingAnalysisRangeBtn");
+const pingAnalysisRangeEl = $("pingAnalysisRange");
+const pingAnalysisAvgEl = $("pingAnalysisAvg");
+const pingAnalysisMinEl = $("pingAnalysisMin");
+const pingAnalysisMaxEl = $("pingAnalysisMax");
+const pingAnalysisCountEl = $("pingAnalysisCount");
+const pingAnalysisErrorsEl = $("pingAnalysisErrors");
+const pingAnalysisRowsEl = $("pingAnalysisRows");
 const completionChartCanvas = $("completionChart");
 const dashboardQuestFilterEl = $("dashboardQuestFilter");
 const completionThisMonthEl = $("completionThisMonth");
@@ -2030,10 +2151,16 @@ tableEl.addEventListener("dragend", () => {
 let pingOn = false;
 let pingTimer = null;
 const PING_HISTORY_KEY = "pingHistory";
+const PING_RECENT_KEY = "pingRecentSamples";
 const PING_HISTORY_WINDOW_MS = 6 * 60 * 60 * 1000;
+const PING_RECENT_WINDOW_MS = 60 * 1000;
 const PING_BUCKET_MS = 60 * 1000;
 const PING_CHART_BUCKETS = PING_HISTORY_WINDOW_MS / PING_BUCKET_MS;
 let pingHistory = loadPingHistory();
+let pingRecentSamples = loadPingRecentSamples();
+let pingAnalysisMinutes = [];
+let pingAnalysisSelection = null;
+let pingAnalysisDragStart = null;
 
 completionChart = new Chart(completionChartCanvas, {
   type: "bar",
@@ -2075,14 +2202,14 @@ const pingChart = new Chart(chartCanvas, {
   data: {
     labels: [],
     datasets: [{
-      label: "Ping 1分平均 (ms)",
+      label: "Ping (ms)",
       data: [],
       borderColor: "#5b8cff",
       backgroundColor: "rgba(91,140,255,.18)",
       borderWidth: 2,
       tension: .3,
       fill: true,
-      pointRadius: 0,
+      pointRadius: 2,
       pointHoverRadius: 4
     }]
   },
@@ -2099,7 +2226,7 @@ const pingChart = new Chart(chartCanvas, {
     },
     scales: {
       x: {
-        ticks: { color: "#9fb0d0", maxRotation: 0, maxTicksLimit: 7 },
+        ticks: { color: "#9fb0d0", maxRotation: 0, maxTicksLimit: 6 },
         grid: { color: "rgba(255,255,255,.08)" }
       },
       y: {
@@ -2109,6 +2236,94 @@ const pingChart = new Chart(chartCanvas, {
       }
     }
   }
+});
+
+const pingSelectionPlugin = {
+  id: "pingSelection",
+  beforeDatasetsDraw(chart){
+    if(chart.canvas !== pingAnalysisChartCanvas || !pingAnalysisSelection) return;
+
+    const startIndex = pingAnalysisMinutes.indexOf(pingAnalysisSelection.start);
+    const endIndex = pingAnalysisMinutes.indexOf(pingAnalysisSelection.end);
+    if(startIndex < 0 || endIndex < 0) return;
+
+    const x = chart.scales.x;
+    const left = x.getPixelForValue(Math.min(startIndex, endIndex));
+    const right = x.getPixelForValue(Math.max(startIndex, endIndex));
+    const { top, bottom } = chart.chartArea;
+    const ctx = chart.ctx;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(91,140,255,.18)";
+    ctx.strokeStyle = "rgba(91,140,255,.9)";
+    ctx.lineWidth = 1;
+    ctx.fillRect(left, top, Math.max(2, right - left), bottom - top);
+    ctx.strokeRect(left, top, Math.max(2, right - left), bottom - top);
+    ctx.restore();
+  }
+};
+
+const pingAnalysisChart = new Chart(pingAnalysisChartCanvas, {
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [
+      {
+        label: "1分平均 (ms)",
+        data: [],
+        borderColor: "#5b8cff",
+        backgroundColor: "rgba(91,140,255,.12)",
+        borderWidth: 2,
+        tension: .25,
+        fill: true,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        spanGaps: false
+      },
+      {
+        label: "1分最大 (ms)",
+        data: [],
+        borderColor: "#ffb547",
+        backgroundColor: "transparent",
+        borderWidth: 1.5,
+        borderDash: [5, 4],
+        tension: .2,
+        fill: false,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        spanGaps: false
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { labels: { color: "#9fb0d0" } },
+      tooltip: {
+        callbacks: {
+          title(items){
+            const index = items[0]?.dataIndex;
+            return Number.isInteger(index) ? formatPingDateTime(pingAnalysisMinutes[index]) : "";
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: "#9fb0d0", maxRotation: 0, maxTicksLimit: 9 },
+        grid: { color: "rgba(255,255,255,.08)" }
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { color: "#9fb0d0" },
+        grid: { color: "rgba(255,255,255,.08)" }
+      }
+    }
+  },
+  plugins: [pingSelectionPlugin]
 });
 
 function updatePingUi(){
@@ -2126,6 +2341,11 @@ function prunePingHistory(now = Date.now()){
   pingHistory = pingHistory.filter((entry) => entry.minute > cutoff);
 }
 
+function prunePingRecentSamples(now = Date.now()){
+  const cutoff = now - PING_RECENT_WINDOW_MS;
+  pingRecentSamples = pingRecentSamples.filter((entry) => entry.at > cutoff);
+}
+
 function loadPingHistory(){
   try{
     const parsed = JSON.parse(localStorage.getItem(PING_HISTORY_KEY) || "[]");
@@ -2135,23 +2355,49 @@ function loadPingHistory(){
       .filter((entry) => (
         Number.isFinite(Number(entry?.minute)) &&
         Number.isFinite(Number(entry?.sum)) &&
-        Number.isFinite(Number(entry?.count)) && Number(entry.count) > 0 &&
-        Number.isFinite(Number(entry?.max)) &&
-        Number.isFinite(Number(entry?.last))
+        Number.isFinite(Number(entry?.count)) && Number(entry.count) >= 0 &&
+        (Number(entry.count) > 0 || Number(entry?.errors || 0) > 0)
       ))
-      .map((entry) => ({
-        minute: Math.floor(Number(entry.minute) / PING_BUCKET_MS) * PING_BUCKET_MS,
-        sum: Number(entry.sum),
-        count: Number(entry.count),
-        max: Number(entry.max),
-        last: Number(entry.last)
-      }))
+      .map((entry) => {
+        const count = Number(entry.count);
+        const average = count > 0 ? Number(entry.sum) / count : null;
+        const last = Number.isFinite(Number(entry.last)) ? Number(entry.last) : average;
+        const max = Number.isFinite(Number(entry.max)) ? Number(entry.max) : last;
+        const min = Number.isFinite(Number(entry.min)) ? Number(entry.min) : Math.min(last, average);
+        return {
+          minute: Math.floor(Number(entry.minute) / PING_BUCKET_MS) * PING_BUCKET_MS,
+          sum: Number(entry.sum),
+          count,
+          min: count > 0 ? min : null,
+          max: count > 0 ? max : null,
+          last: count > 0 ? last : null,
+          errors: Math.max(0, Number(entry.errors) || 0)
+        };
+      })
       .sort((a, b) => a.minute - b.minute);
 
     const cutoff = Date.now() - PING_HISTORY_WINDOW_MS;
     return normalized.filter((entry) => entry.minute > cutoff);
   }catch(error){
     console.error("Ping history parse failed", error);
+    return [];
+  }
+}
+
+function loadPingRecentSamples(){
+  try{
+    const parsed = JSON.parse(localStorage.getItem(PING_RECENT_KEY) || "[]");
+    if(!Array.isArray(parsed)) return [];
+    const cutoff = Date.now() - PING_RECENT_WINDOW_MS;
+    return parsed
+      .filter((entry) => (
+        Number.isFinite(Number(entry?.at)) && Number(entry.at) > cutoff &&
+        Number.isFinite(Number(entry?.ms))
+      ))
+      .map((entry) => ({ at: Number(entry.at), ms: Number(entry.ms) }))
+      .sort((a, b) => a.at - b.at);
+  }catch(error){
+    console.error("Recent ping samples parse failed", error);
     return [];
   }
 }
@@ -2164,19 +2410,44 @@ function savePingHistory(){
   }
 }
 
-function recordPing(ms, now = Date.now()){
-  const minute = Math.floor(now / PING_BUCKET_MS) * PING_BUCKET_MS;
-  const currentBucket = pingHistory[pingHistory.length - 1];
-
-  if(currentBucket && currentBucket.minute === minute){
-    currentBucket.sum += ms;
-    currentBucket.count += 1;
-    currentBucket.max = Math.max(currentBucket.max, ms);
-    currentBucket.last = ms;
-  }else{
-    pingHistory.push({ minute, sum: ms, count: 1, max: ms, last: ms });
+function savePingRecentSamples(){
+  try{
+    localStorage.setItem(PING_RECENT_KEY, JSON.stringify(pingRecentSamples));
+  }catch(error){
+    console.error("Recent ping samples save failed", error);
   }
+}
 
+function getPingBucket(now){
+  const minute = Math.floor(now / PING_BUCKET_MS) * PING_BUCKET_MS;
+  let bucket = pingHistory.find((entry) => entry.minute === minute);
+  if(!bucket){
+    bucket = { minute, sum: 0, count: 0, min: null, max: null, last: null, errors: 0 };
+    pingHistory.push(bucket);
+    pingHistory.sort((a, b) => a.minute - b.minute);
+  }
+  return bucket;
+}
+
+function recordPing(ms, now = Date.now()){
+  const bucket = getPingBucket(now);
+  bucket.sum += ms;
+  bucket.count += 1;
+  bucket.min = bucket.min === null ? ms : Math.min(bucket.min, ms);
+  bucket.max = bucket.max === null ? ms : Math.max(bucket.max, ms);
+  bucket.last = ms;
+
+  pingRecentSamples.push({ at: now, ms });
+  prunePingRecentSamples(now);
+
+  prunePingHistory(now);
+  savePingHistory();
+  savePingRecentSamples();
+}
+
+function recordPingFailure(now = Date.now()){
+  const bucket = getPingBucket(now);
+  bucket.errors += 1;
   prunePingHistory(now);
   savePingHistory();
 }
@@ -2188,20 +2459,36 @@ function formatPingTime(timestamp){
   });
 }
 
+function formatPingSecond(timestamp){
+  return new Date(timestamp).toLocaleTimeString("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function formatPingDateTime(timestamp){
+  return new Date(timestamp).toLocaleString("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function updatePingStats(){
-  prunePingHistory();
-  if(!pingHistory.length){
+  prunePingRecentSamples();
+  if(!pingRecentSamples.length){
     pingNowEl.textContent = "--";
     pingAvgEl.textContent = "--";
     pingMaxEl.textContent = "--";
     return;
   }
 
-  const current = pingHistory[pingHistory.length - 1].last;
-  const total = pingHistory.reduce((sum, entry) => sum + entry.sum, 0);
-  const count = pingHistory.reduce((sum, entry) => sum + entry.count, 0);
-  const avg = Math.round(total / count);
-  const max = Math.max(...pingHistory.map((entry) => entry.max));
+  const values = pingRecentSamples.map((entry) => entry.ms);
+  const current = values[values.length - 1];
+  const avg = Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+  const max = Math.max(...values);
 
   pingNowEl.textContent = current;
   pingAvgEl.textContent = avg;
@@ -2209,20 +2496,99 @@ function updatePingStats(){
 }
 
 function refreshPingChart(){
+  prunePingRecentSamples();
+  pingChart.data.labels = pingRecentSamples.map((entry) => formatPingSecond(entry.at));
+  pingChart.data.datasets[0].data = pingRecentSamples.map((entry) => entry.ms);
+  pingChart.update();
+}
+
+function resetPingAnalysisSelection(){
+  if(!pingAnalysisMinutes.length) return;
+  pingAnalysisSelection = {
+    start: pingAnalysisMinutes[0],
+    end: pingAnalysisMinutes[pingAnalysisMinutes.length - 1]
+  };
+  pingAnalysisChart.draw();
+  renderPingAnalysisDetails();
+}
+
+function refreshPingAnalysisChart(resetSelection = false){
+  prunePingHistory();
   const currentMinute = Math.floor(Date.now() / PING_BUCKET_MS) * PING_BUCKET_MS;
   const firstMinute = currentMinute - (PING_CHART_BUCKETS - 1) * PING_BUCKET_MS;
-  const averages = new Map(pingHistory.map((entry) => [
-    entry.minute,
-    Math.round(entry.sum / entry.count)
-  ]));
-  const minutes = Array.from(
+  pingAnalysisMinutes = Array.from(
     { length: PING_CHART_BUCKETS },
     (_, index) => firstMinute + index * PING_BUCKET_MS
   );
+  const buckets = new Map(pingHistory.map((entry) => [entry.minute, entry]));
 
-  pingChart.data.labels = minutes.map(formatPingTime);
-  pingChart.data.datasets[0].data = minutes.map((minute) => averages.get(minute) ?? null);
-  pingChart.update();
+  pingAnalysisChart.data.labels = pingAnalysisMinutes.map(formatPingTime);
+  pingAnalysisChart.data.datasets[0].data = pingAnalysisMinutes.map((minute) => {
+    const bucket = buckets.get(minute);
+    return bucket?.count ? Math.round(bucket.sum / bucket.count) : null;
+  });
+  pingAnalysisChart.data.datasets[1].data = pingAnalysisMinutes.map((minute) => {
+    const bucket = buckets.get(minute);
+    return bucket?.count ? bucket.max : null;
+  });
+
+  const selectionIsVisible = pingAnalysisSelection &&
+    pingAnalysisMinutes.includes(pingAnalysisSelection.start) &&
+    pingAnalysisMinutes.includes(pingAnalysisSelection.end);
+  if(resetSelection || !selectionIsVisible){
+    pingAnalysisSelection = {
+      start: pingAnalysisMinutes[0],
+      end: pingAnalysisMinutes[pingAnalysisMinutes.length - 1]
+    };
+  }
+
+  pingAnalysisChart.update();
+  renderPingAnalysisDetails();
+}
+
+function renderPingAnalysisDetails(){
+  if(!pingAnalysisSelection) return;
+  const start = Math.min(pingAnalysisSelection.start, pingAnalysisSelection.end);
+  const end = Math.max(pingAnalysisSelection.start, pingAnalysisSelection.end);
+  const selected = pingHistory.filter((entry) => entry.minute >= start && entry.minute <= end);
+  const successful = selected.filter((entry) => entry.count > 0);
+  const count = successful.reduce((sum, entry) => sum + entry.count, 0);
+  const total = successful.reduce((sum, entry) => sum + entry.sum, 0);
+  const errors = selected.reduce((sum, entry) => sum + entry.errors, 0);
+  const minimums = successful.map((entry) => entry.min);
+  const maximums = successful.map((entry) => entry.max);
+
+  pingAnalysisRangeEl.textContent = `${formatPingDateTime(start)} ～ ${formatPingDateTime(end + PING_BUCKET_MS - 1)}`;
+  pingAnalysisAvgEl.textContent = count ? Math.round(total / count) : "--";
+  pingAnalysisMinEl.textContent = count ? Math.min(...minimums) : "--";
+  pingAnalysisMaxEl.textContent = count ? Math.max(...maximums) : "--";
+  pingAnalysisCountEl.textContent = count;
+  pingAnalysisErrorsEl.textContent = errors;
+
+  pingAnalysisRowsEl.innerHTML = selected.length
+    ? [...selected].reverse().map((entry) => {
+        const avg = entry.count ? Math.round(entry.sum / entry.count) : "--";
+        return `<tr><td>${formatPingDateTime(entry.minute)}</td><td>${avg}</td><td>${entry.min ?? "--"}</td><td>${entry.max ?? "--"}</td><td>${entry.count}</td><td>${entry.errors}</td></tr>`;
+      }).join("")
+    : `<tr><td colspan="6" class="empty">選択範囲に測定データがありません</td></tr>`;
+}
+
+function getPingAnalysisMinute(event){
+  const rect = pingAnalysisChartCanvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const area = pingAnalysisChart.chartArea;
+  if(!area || x < area.left || x > area.right) return null;
+  const rawIndex = pingAnalysisChart.scales.x.getValueForPixel(x);
+  const index = Math.max(0, Math.min(pingAnalysisMinutes.length - 1, Math.round(rawIndex)));
+  return pingAnalysisMinutes[index] ?? null;
+}
+
+function openPingAnalysis(){
+  pingAnalysisDialog.showModal();
+  requestAnimationFrame(() => {
+    pingAnalysisChart.resize();
+    refreshPingAnalysisChart(true);
+  });
 }
 
 async function samplePing(){
@@ -2239,8 +2605,11 @@ async function samplePing(){
 
     updatePingStats();
     refreshPingChart();
+    if(pingAnalysisDialog.open) refreshPingAnalysisChart();
   }catch(error){
+    recordPingFailure();
     pingNowEl.textContent = "ERR";
+    if(pingAnalysisDialog.open) refreshPingAnalysisChart();
   }
 }
 
@@ -2273,9 +2642,12 @@ function togglePing(){
 
 function clearPing(){
   pingHistory = [];
+  pingRecentSamples = [];
   localStorage.removeItem(PING_HISTORY_KEY);
+  localStorage.removeItem(PING_RECENT_KEY);
   updatePingStats();
   refreshPingChart();
+  refreshPingAnalysisChart(true);
 }
 
 updatePingUi();
@@ -2335,6 +2707,43 @@ saveQuestBtn.addEventListener("click", saveQuest);
 
 togglePingBtn.addEventListener("click", togglePing);
 clearPingBtn.addEventListener("click", clearPing);
+openPingAnalysisBtn.addEventListener("click", openPingAnalysis);
+resetPingAnalysisRangeBtn.addEventListener("click", resetPingAnalysisSelection);
+pingAnalysisChartCanvas.addEventListener("pointerdown", (event) => {
+  const minute = getPingAnalysisMinute(event);
+  if(minute === null) return;
+  pingAnalysisDragStart = minute;
+  pingAnalysisSelection = { start: minute, end: minute };
+  pingAnalysisChartCanvas.setPointerCapture(event.pointerId);
+  pingAnalysisChart.draw();
+});
+pingAnalysisChartCanvas.addEventListener("pointermove", (event) => {
+  if(pingAnalysisDragStart === null) return;
+  const minute = getPingAnalysisMinute(event);
+  if(minute === null) return;
+  pingAnalysisSelection = {
+    start: Math.min(pingAnalysisDragStart, minute),
+    end: Math.max(pingAnalysisDragStart, minute)
+  };
+  pingAnalysisChart.draw();
+});
+pingAnalysisChartCanvas.addEventListener("pointerup", (event) => {
+  if(pingAnalysisDragStart === null) return;
+  const minute = getPingAnalysisMinute(event) ?? pingAnalysisDragStart;
+  pingAnalysisSelection = {
+    start: Math.min(pingAnalysisDragStart, minute),
+    end: Math.max(pingAnalysisDragStart, minute)
+  };
+  pingAnalysisDragStart = null;
+  if(pingAnalysisChartCanvas.hasPointerCapture(event.pointerId)){
+    pingAnalysisChartCanvas.releasePointerCapture(event.pointerId);
+  }
+  pingAnalysisChart.draw();
+  renderPingAnalysisDetails();
+});
+pingAnalysisChartCanvas.addEventListener("pointercancel", () => {
+  pingAnalysisDragStart = null;
+});
 dashboardQuestFilterEl.addEventListener("change", renderDashboard);
 
 document.querySelectorAll("[data-close]").forEach((btn) => {
