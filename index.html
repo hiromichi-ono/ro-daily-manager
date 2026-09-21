@@ -499,6 +499,20 @@ body.light .chart-wrap{
   min-width:110px;
 }
 
+.ping-range-control{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:700;
+}
+
+.ping-range-control select{
+  width:auto;
+  min-width:90px;
+}
+
 .analysis-resolution-note{
   min-height:20px;
   margin-bottom:8px;
@@ -818,8 +832,17 @@ dialog::backdrop{
           <button id="togglePingBtn" class="btn btn-primary" type="button">Ping Monitor ON</button>
           <button id="clearPingBtn" class="btn btn-secondary" type="button">履歴クリア</button>
           <button id="openPingAnalysisBtn" class="btn btn-secondary" type="button">拡大分析</button>
+          <label class="ping-range-control">表示範囲
+            <select id="pingLiveRange">
+              <option value="1">1分</option>
+              <option value="5">5分</option>
+              <option value="15">15分</option>
+              <option value="30">30分</option>
+              <option value="60">60分</option>
+            </select>
+          </label>
         </div>
-        <div class="subtle">通常グラフは直近1分。拡大分析用に6時間分を端末内へ保存します。</div>
+        <div class="subtle">通常グラフは1秒間隔で最大60分。拡大分析用に6時間分を端末内へ保存します。</div>
 
         <div class="metrics">
           <div class="metric-card">
@@ -827,11 +850,11 @@ dialog::backdrop{
             <div class="metric-value"><span id="pingNow">--</span><span class="metric-unit">ms</span></div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">1分平均</div>
+            <div id="pingAvgLabel" class="metric-label">1分平均</div>
             <div class="metric-value"><span id="pingAvg">--</span><span class="metric-unit">ms</span></div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">1分最大</div>
+            <div id="pingMaxLabel" class="metric-label">1分最大</div>
             <div class="metric-value"><span id="pingMax">--</span><span class="metric-unit">ms</span></div>
           </div>
         </div>
@@ -1047,9 +1070,12 @@ const saveCellTimeBtn = $("saveCellTimeBtn");
 const togglePingBtn = $("togglePingBtn");
 const clearPingBtn = $("clearPingBtn");
 const openPingAnalysisBtn = $("openPingAnalysisBtn");
+const pingLiveRangeEl = $("pingLiveRange");
 const pingNowEl = $("pingNow");
 const pingAvgEl = $("pingAvg");
 const pingMaxEl = $("pingMax");
+const pingAvgLabelEl = $("pingAvgLabel");
+const pingMaxLabelEl = $("pingMaxLabel");
 const pingStateEl = $("pingState");
 const chartCanvas = $("chart");
 const pingAnalysisDialog = $("pingAnalysisDialog");
@@ -2681,29 +2707,48 @@ function formatPingDateTimeSecond(timestamp){
   });
 }
 
+function getPingLiveRangeMinutes(){
+  const value = Number(pingLiveRangeEl.value);
+  return [1, 5, 15, 30, 60].includes(value) ? value : 1;
+}
+
+function getPingLiveSamples(now = Date.now()){
+  prunePingRawHistory(now);
+  const cutoff = now - getPingLiveRangeMinutes() * 60 * 1000;
+  return pingRawHistory.filter((entry) => entry[0] > cutoff);
+}
+
 function updatePingStats(){
-  prunePingRecentSamples();
-  if(!pingRecentSamples.length){
+  const rangeMinutes = getPingLiveRangeMinutes();
+  const samples = getPingLiveSamples();
+  const successful = samples.filter((entry) => entry[1] !== null);
+  pingAvgLabelEl.textContent = `${rangeMinutes}分平均`;
+  pingMaxLabelEl.textContent = `${rangeMinutes}分最大`;
+
+  if(!samples.length){
     pingNowEl.textContent = "--";
     pingAvgEl.textContent = "--";
     pingMaxEl.textContent = "--";
     return;
   }
 
-  const values = pingRecentSamples.map((entry) => entry.ms);
-  const current = values[values.length - 1];
-  const avg = Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
-  const max = Math.max(...values);
+  const current = samples[samples.length - 1][1];
+  const values = successful.map((entry) => entry[1]);
 
-  pingNowEl.textContent = current;
-  pingAvgEl.textContent = avg;
-  pingMaxEl.textContent = max;
+  pingNowEl.textContent = current === null ? "ERR" : current;
+  pingAvgEl.textContent = values.length
+    ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+    : "--";
+  pingMaxEl.textContent = values.length ? Math.max(...values) : "--";
 }
 
 function refreshPingChart(){
-  prunePingRecentSamples();
-  pingChart.data.labels = pingRecentSamples.map((entry) => formatPingSecond(entry.at));
-  pingChart.data.datasets[0].data = pingRecentSamples.map((entry) => entry.ms);
+  const samples = getPingLiveSamples();
+  const rangeMinutes = getPingLiveRangeMinutes();
+  pingChart.data.labels = samples.map((entry) => formatPingSecond(entry[0]));
+  pingChart.data.datasets[0].data = samples.map((entry) => entry[1]);
+  pingChart.data.datasets[0].pointRadius = rangeMinutes === 1 ? 2 : 0;
+  pingChart.data.datasets[0].pointHoverRadius = rangeMinutes === 1 ? 4 : 3;
   pingChart.update();
 }
 
@@ -2971,6 +3016,10 @@ saveQuestBtn.addEventListener("click", saveQuest);
 togglePingBtn.addEventListener("click", togglePing);
 clearPingBtn.addEventListener("click", clearPing);
 openPingAnalysisBtn.addEventListener("click", openPingAnalysis);
+pingLiveRangeEl.addEventListener("change", () => {
+  updatePingStats();
+  refreshPingChart();
+});
 resetPingAnalysisRangeBtn.addEventListener("click", resetPingAnalysisSelection);
 pingAnalysisResolutionEl.addEventListener("change", renderPingAnalysisDetails);
 pingAnalysisChartCanvas.addEventListener("pointerdown", (event) => {
